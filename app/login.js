@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { auth, db, authState } from '../lib/firebase';
 import {
     createUserWithEmailAndPassword,
@@ -10,6 +10,7 @@ import {
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import BackgroundLayout from '../components/BackgroundLayout';
 
 export default function Login() {
     const [email, setEmail] = useState('');
@@ -22,7 +23,6 @@ export default function Login() {
     const [errorMsg, setErrorMsg] = useState('');
 
     async function handleAuth() {
-        // console.log('[Auth] Button pressed. mode:', isSignUp ? 'SignUp' : 'SignIn', 'email:', email);
         setErrorMsg('');
 
         if (!email || !password) {
@@ -52,7 +52,7 @@ export default function Login() {
                 return;
             }
 
-            // NEW: Check for unique username
+            // Check for unique username
             setLoading(true);
             try {
                 const profilesRef = collection(db, 'profiles');
@@ -77,24 +77,20 @@ export default function Login() {
 
         try {
             if (isSignUp) {
-                // console.log('[Auth] Calling Firebase signUp...');
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
 
                 // Set Display Name
                 await updateProfile(user, { displayName: username });
-
-                // console.log('[Auth] signUp Success. User:', user.uid);
                 await ensureProfile(user, username);
-
                 await signOut(auth);
-                // Flag reset after sign out to allow future redirects
+
+                // Flag reset after sign out
                 authState.isSigningUp = false;
 
                 Alert.alert('Success', 'Account created successfully! Please sign in.');
                 setIsSignUp(false);
             } else {
-                // console.log('[Auth] Calling Firebase signIn...');
                 await signInWithEmailAndPassword(auth, email, password);
                 // Firebase automatically updates auth state
             }
@@ -123,12 +119,10 @@ export default function Login() {
 
     async function ensureProfile(user, manualUsername) {
         try {
-            // console.log('[Profile] Ensuring profile for:', user.uid);
             const userRef = doc(db, 'profiles', user.uid);
             const userSnap = await getDoc(userRef);
 
             if (!userSnap.exists()) {
-                console.log('[Profile] Creating new Firestore profile...');
                 await setDoc(userRef, {
                     username: manualUsername || user.displayName || email.split('@')[0],
                     reputation: 1000,
@@ -142,129 +136,168 @@ export default function Login() {
     }
 
     return (
-        <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.container}
-        >
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                keyboardShouldPersistTaps="handled"
+        <BackgroundLayout>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.container}
             >
-                <View style={styles.responsiveContent}>
-                    {/* Logo or Icon */}
-                    <View style={styles.iconContainer}>
-                        <Ionicons name="trending-up" size={64} color="#00C853" />
-                    </View>
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                >
+                    <View style={styles.responsiveContent}>
+                        {/* Logo or Icon */}
+                        <View style={styles.iconContainer}>
+                            <View style={styles.iconCircle}>
+                                <Ionicons name="pulse" size={60} color="#69F0AE" />
+                            </View>
+                        </View>
 
-                    <Text style={styles.header}>
-                        {isSignUp ? 'Create your account' : 'Welcome to Markets'}
-                    </Text>
+                        <Text style={styles.header}>
+                            {isSignUp ? 'Join Pulse' : 'Welcome Back'}
+                        </Text>
 
-                    <Text style={styles.subHeader}>
-                        {isSignUp ? 'Start predicting today.' : 'Sign in to manage your portfolio.'}
-                    </Text>
+                        <Text style={styles.subHeader}>
+                            {isSignUp ? 'Start predicting today.' : 'Sign in to manage your portfolio.'}
+                        </Text>
 
-                    <View style={styles.form}>
-                        {isSignUp && (
+                        <View style={styles.form}>
+                            {isSignUp && (
+                                <View style={styles.inputContainer}>
+                                    <Text style={styles.label}>USERNAME</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        value={username}
+                                        onChangeText={setUsername}
+                                        autoCapitalize="none"
+                                        placeholder="Trader123"
+                                        placeholderTextColor="rgba(255,255,255,0.4)"
+                                    />
+                                </View>
+                            )}
+
                             <View style={styles.inputContainer}>
-                                <Text style={styles.label}>USERNAME</Text>
+                                <Text style={styles.label}>EMAIL</Text>
                                 <TextInput
                                     style={styles.input}
-                                    value={username}
-                                    onChangeText={setUsername}
+                                    value={email}
+                                    onChangeText={setEmail}
                                     autoCapitalize="none"
-                                    placeholder="Trader123"
-                                    placeholderTextColor="#ccc"
+                                    keyboardType="email-address"
+                                    placeholder="name@example.com"
+                                    placeholderTextColor="rgba(255,255,255,0.4)"
                                 />
                             </View>
-                        )}
 
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.label}>EMAIL</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={email}
-                                onChangeText={setEmail}
-                                autoCapitalize="none"
-                                keyboardType="email-address"
-                                placeholder="name@example.com"
-                                placeholderTextColor="#ccc"
-                            />
+                            <View style={styles.inputContainer}>
+                                <Text style={styles.label}>PASSWORD</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    value={password}
+                                    onChangeText={setPassword}
+                                    secureTextEntry
+                                    placeholder="Minimum 8 characters"
+                                    placeholderTextColor="rgba(255,255,255,0.4)"
+                                />
+                            </View>
+
+                            {errorMsg ? (
+                                <View style={styles.errorBox}>
+                                    <Ionicons name="alert-circle" size={16} color="#FF5252" />
+                                    <Text style={styles.errorText}>{errorMsg}</Text>
+                                </View>
+                            ) : null}
+
+                            <TouchableOpacity
+                                style={[styles.primaryBtn, loading && styles.btnDisabled]}
+                                onPress={handleAuth}
+                                disabled={loading}
+                            >
+                                {loading ? (
+                                    <ActivityIndicator color="#141E30" />
+                                ) : (
+                                    <Text style={styles.primaryBtnText}>
+                                        {isSignUp ? 'Create Account' : 'Log In'}
+                                    </Text>
+                                )}
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.secondaryBtn}
+                                onPress={() => {
+                                    setIsSignUp(!isSignUp);
+                                    setErrorMsg('');
+                                }}
+                            >
+                                <Text style={styles.secondaryBtnText}>
+                                    {isSignUp ? 'Already have an account? Log in' : 'New here? Create an account'}
+                                </Text>
+                            </TouchableOpacity>
                         </View>
-
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.label}>PASSWORD</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={password}
-                                onChangeText={setPassword}
-                                secureTextEntry
-                                placeholder="Minimum 8 characters"
-                                placeholderTextColor="#ccc"
-                            />
-                        </View>
-
-                        {errorMsg ? (
-                            <Text style={styles.errorText}>{errorMsg}</Text>
-                        ) : null}
-
-                        <TouchableOpacity
-                            style={[styles.primaryBtn, loading && styles.btnDisabled]}
-                            onPress={handleAuth}
-                            disabled={loading}
-                        >
-                            <Text style={styles.primaryBtnText}>
-                                {loading ? 'Please wait...' : isSignUp ? 'Sign Up' : 'Log In'}
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.secondaryBtn}
-                            onPress={() => setIsSignUp(!isSignUp)}
-                        >
-                            <Text style={styles.secondaryBtnText}>
-                                {isSignUp ? 'Already have an account? Log in' : 'New here? Create an account'}
-                            </Text>
-                        </TouchableOpacity>
                     </View>
-                </View>
-            </ScrollView>
-        </KeyboardAvoidingView>
+                </ScrollView>
+            </KeyboardAvoidingView>
+        </BackgroundLayout>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#fff',
     },
     scrollContent: {
         flexGrow: 1,
         justifyContent: 'center',
         paddingVertical: 40,
+        paddingHorizontal: 20,
     },
     responsiveContent: {
         width: '100%',
-        maxWidth: 450,
+        maxWidth: 400,
         alignSelf: 'center',
-        paddingHorizontal: 30,
+        padding: 30,
+        borderRadius: 24,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
     },
     iconContainer: {
         alignItems: 'center',
-        marginBottom: 30,
+        marginBottom: 24,
+    },
+    iconCircle: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: 'rgba(105, 240, 174, 0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(105, 240, 174, 0.3)',
+        shadowColor: '#69F0AE',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.5,
+        shadowRadius: 20,
     },
     header: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        color: '#333',
+        fontSize: 32,
+        fontFamily: 'Inter_900Black',
+        color: '#ffffff',
         textAlign: 'center',
         marginBottom: 8,
+        letterSpacing: -1,
     },
     subHeader: {
         fontSize: 16,
-        color: '#666',
+        fontFamily: 'Inter_400Regular',
+        color: 'rgba(255, 255, 255, 0.6)',
         textAlign: 'center',
-        marginBottom: 40,
+        marginBottom: 32,
     },
     form: {
         width: '100%',
@@ -273,37 +306,43 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     label: {
-        fontSize: 10,
-        fontWeight: 'bold',
-        color: '#999',
+        fontSize: 12,
+        fontFamily: 'Inter_700Bold',
+        color: '#69F0AE',
         marginBottom: 8,
+        marginLeft: 4,
         letterSpacing: 1,
     },
     input: {
         fontSize: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-        paddingVertical: 8,
-        color: '#333',
+        fontFamily: 'Inter_600SemiBold',
+        backgroundColor: 'rgba(0, 0, 0, 0.2)',
+        borderRadius: 12,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        color: '#ffffff',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
     },
     primaryBtn: {
-        backgroundColor: '#00C853',
+        backgroundColor: '#69F0AE',
         borderRadius: 30,
         paddingVertical: 16,
         alignItems: 'center',
-        marginTop: 20,
-        elevation: 2,
-        shadowColor: '#00C853',
+        marginTop: 10,
+        shadowColor: '#69F0AE',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+        elevation: 5,
     },
     btnDisabled: {
         opacity: 0.7,
     },
     primaryBtnText: {
-        color: '#fff',
+        color: '#141E30',
         fontSize: 16,
-        fontWeight: 'bold',
+        fontFamily: 'Inter_700Bold',
     },
     secondaryBtn: {
         marginTop: 20,
@@ -311,14 +350,25 @@ const styles = StyleSheet.create({
         padding: 10,
     },
     secondaryBtnText: {
-        color: '#00C853',
-        fontWeight: '600',
+        color: 'rgba(255, 255, 255, 0.7)',
+        fontFamily: 'Inter_600SemiBold',
+        fontSize: 14,
+    },
+    errorBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 82, 82, 0.1)',
+        padding: 12,
+        borderRadius: 12,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 82, 82, 0.3)',
+        gap: 8,
     },
     errorText: {
-        color: '#D50000',
-        textAlign: 'center',
-        marginBottom: 10,
-        fontWeight: '600',
+        color: '#FF5252',
+        fontFamily: 'Inter_600SemiBold',
         fontSize: 14,
+        flex: 1,
     }
 });
