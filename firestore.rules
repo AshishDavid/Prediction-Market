@@ -12,23 +12,24 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // 1. Markets: Public Read, Admin Write
+    // 1. Markets: Public Read
     match /markets/{marketId} {
       allow read: if true;
+      
+      // Admin can do anything (create/delete/update)
       allow write: if isAdmin();
+
+      // Normal Users can UPDATE to increment votes
+      // We block them from changing the Question, Category, or resolving it (Outcome)
+      allow update: if isAuthenticated() 
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['question', 'category', 'outcome', 'close_time', 'created_at']));
     }
 
     // 2. Predictions: Public Read, Users can Create/Update their own
     match /predictions/{predictionId} {
       allow read: if true;
-      
-      // Allow creation if user is authenticated and sets strictly their own user_id
       allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
-      
-      // Allow update if user owns the prediction (to change vote)
       allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid;
-      
-      // Allow deleting if admin (for cleanup) or owner (if we wanted retracting, but let's stick to admin/owner)
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.user_id == request.auth.uid);
     }
 
