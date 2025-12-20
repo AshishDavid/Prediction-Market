@@ -1,7 +1,8 @@
+```
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Button } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Button, Alert } from 'react-native';
 import { auth, db } from '../../lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs, deleteDoc, runTransaction, increment } from 'firebase/firestore';
 import { getRankName, RANKS } from '../../utils/reputation';
 import { useRouter } from 'expo-router';
 import { ScrollView, TouchableOpacity, Modal, FlatList } from 'react-native';
@@ -44,8 +45,74 @@ export default function Profile() {
         router.replace('/');
     }
 
+    async function handlePruneGhosts() {
+        if (!profile?.is_admin) return;
+        setLoading(true);
+        try {
+            console.log('Starting Prune...');
+            // 1. Get All Profiles
+            const profilesSnap = await getDocs(collection(db, 'profiles'));
+            const userIds = new Set(profilesSnap.docs.map(d => d.id));
+
+            // 2. Get All Predictions
+            const predsSnap = await getDocs(collection(db, 'predictions'));
+            const orphans = [];
+            predsSnap.forEach(doc => {
+                 if (!userIds.has(doc.data().user_id)) orphans.push(doc);
+            });
+
+            console.log(`Found ${ orphans.length } orphans.`);
+
+            if (orphans.length === 0) {
+                Alert.alert('Clean', 'No ghost votes found.');
+                setLoading(false);
+                return;
+            }
+
+            // 3. Delete & Update Counters
+            for (const orphan of orphans) {
+                const data = orphan.data();
+                await runTransaction(db, async (transaction) => {
+                    // Delete Prediction
+                    transaction.delete(orphan.ref);
+
+                    // Update Market
+                    if (data.market_id) {
+                        const marketRef = doc(db, 'markets', data.market_id);
+                        const fieldToDecrement = data.vote === 'YES' ? 'yes_votes' : 'no_votes';
+                        transaction.update(marketRef, {
+                            [fieldToDecrement]: increment(-1),
+                            vote_count: increment(-1)
+                        });
+                    }
+                });
+            }
+
+            Alert.alert('Success', `Deleted ${ orphans.length } ghost votes and updated markets.`);
+
+        } catch (e) {
+            console.error('Prune failed:', e);
+            Alert.alert('Error', e.message);
+        } finally {
+            setLoading(false);
+        }
+    }
+
     if (loading) return <BackgroundLayout style={styles.center}><ActivityIndicator color="#69F0AE" /></BackgroundLayout>;
-    if (!profile) return null;
+    if (!profile) {
+        return (
+            <BackgroundLayout style={[styles.center, { padding: 20 }]}>
+                <Ionicons name="alert-circle-outline" size={60} color="#FF5252" />
+                <Text style={[styles.username, { marginTop: 20, textAlign: 'center' }]}>Profile Not Found</Text>
+                <Text style={{ color: '#fff', textAlign: 'center', marginBottom: 20, opacity: 0.7 }}>
+                    Your account data might have been deleted. Please log out and sign up again.
+                </Text>
+                <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+                    <Text style={styles.logoutText}>Log Out</Text>
+                </TouchableOpacity>
+            </BackgroundLayout>
+        );
+    }
 
     return (
         <BackgroundLayout>
@@ -84,6 +151,16 @@ export default function Profile() {
                     >
                         <Text style={styles.logoutBtnText}>Logout</Text>
                     </TouchableOpacity>
+
+                    {profile.is_admin && (
+                        <View style={styles.adminSection}>
+                            <Text style={styles.sectionTitle}>Admin Tools</Text>
+                            <TouchableOpacity onPress={handlePruneGhosts} style={styles.adminButton}>
+                                <Ionicons name="bug-outline" size={20} color="#fff" />
+                                <Text style={styles.adminBtnText}>Prune Ghost Votes</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
                 </View>
 
                 <Modal
@@ -207,6 +284,53 @@ const styles = StyleSheet.create({
         color: '#FF5252',
         fontFamily: 'Inter_700Bold',
         fontSize: 16,
+    },
+    logoutButton: { // This style is for the "Profile Not Found" screen
+        marginTop: 20,
+        backgroundColor: 'rgba(255, 82, 82, 0.1)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 82, 82, 0.5)',
+        paddingVertical: 12,
+        paddingHorizontal: 30,
+        borderRadius: 25,
+    },
+    logoutText: { // This style is for the "Profile Not Found" screen
+        color: '#FF5252',
+        fontWeight: 'bold',
+        fontSize: 16,
+    },
+    adminSection: {
+        marginTop: 40,
+        paddingTop: 20,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255,255,255,0.1)',
+        width: '100%',
+        alignItems: 'center',
+    },
+    sectionTitle: {
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: 16,
+        fontFamily: 'Inter_700Bold',
+        marginBottom: 15,
+    },
+    adminButton: {
+        flexDirection: 'row',
+        backgroundColor: 'rgba(255, 171, 0, 0.2)',
+        padding: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+        borderWidth: 1,
+        borderColor: '#FFAB00',
+        width: '80%',
+        maxWidth: 300,
+    },
+    adminBtnText: {
+        color: '#FFAB00',
+        fontWeight: 'bold',
+        fontSize: 16,
+        fontFamily: 'Inter_700Bold',
     },
     rankGuideBtn: {
         flexDirection: 'row',
