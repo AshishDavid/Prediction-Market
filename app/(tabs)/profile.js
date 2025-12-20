@@ -79,11 +79,28 @@ export default function Profile() {
                     // Update Market
                     if (data.market_id) {
                         const marketRef = doc(db, 'markets', data.market_id);
-                        const fieldToDecrement = data.vote === 'YES' ? 'yes_votes' : 'no_votes';
-                        transaction.update(marketRef, {
-                            [fieldToDecrement]: increment(-1),
-                            vote_count: increment(-1)
-                        });
+                        const marketDoc = await transaction.get(marketRef);
+
+                        // If market doesn't exist, we just skip updating it (already deleted?)
+                        if (marketDoc.exists()) {
+                            const marketData = marketDoc.data();
+                            let yes = marketData.yes_votes || 0;
+                            let no = marketData.no_votes || 0;
+
+                            if (data.vote === 'YES') yes = Math.max(0, yes - 1);
+                            else if (data.vote === 'NO') no = Math.max(0, no - 1);
+
+                            const total = yes + no;
+                            // Calculate new probability (Standard logic: yes / total) or keep existing if total=0 (50%)
+                            const newProb = total > 0 ? (yes / total) * 100 : 50;
+
+                            transaction.update(marketRef, {
+                                yes_votes: yes,
+                                no_votes: no,
+                                vote_count: total,
+                                probability: newProb
+                            });
+                        }
                     }
                 });
             }

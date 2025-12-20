@@ -118,6 +118,14 @@ const MarketChart = ({ marketId, currentProb }) => {
 export default function MarketDetail() {
     const { id } = useLocalSearchParams();
     const navigation = useNavigation();
+    const navigation = useNavigation();
+
+    useLayoutEffect(() => {
+        navigation.setOptions({
+            headerShown: false,
+        });
+    }, [navigation]);
+
     const [market, setMarket] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -413,6 +421,15 @@ export default function MarketDetail() {
 
     return (
         <BackgroundLayout>
+            {/* Custom Header */}
+            <View style={styles.customHeader}>
+                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                    <Ionicons name="arrow-back" size={24} color="#fff" />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle} numberOfLines={1}>Market Details</Text>
+                <View style={{ width: 40 }} />
+            </View>
+
             <ScrollView
                 style={styles.container}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
@@ -573,6 +590,35 @@ const styles = StyleSheet.create({
         padding: 20,
         paddingTop: 100, // Space for transparent header
         paddingBottom: 40,
+    },
+    customHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingTop: 60,
+        paddingBottom: 20,
+        backgroundColor: 'transparent',
+        zIndex: 10,
+        position: 'absolute', // Make it absolute to overlay content
+        top: 0,
+        left: 0,
+        right: 0,
+    },
+    backButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    headerTitle: {
+        fontSize: 18,
+        fontFamily: 'Inter_700Bold',
+        color: '#fff',
+        maxWidth: 200,
+        textAlign: 'center',
     },
     center: {
         flex: 1,
