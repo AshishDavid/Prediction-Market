@@ -8,14 +8,13 @@ export default function TabLayout() {
                 headerShown: true,
                 tabBarActiveTintColor: '#69F0AE',
                 tabBarInactiveTintColor: '#B0BEC5',
-                tabBarStyle: {
-                    borderTopWidth: 0,
-                    elevation: 0,
-                    height: 60,
-                    paddingBottom: 8,
-                    paddingTop: 8,
-                    backgroundColor: '#141E30',
-                },
+                borderTopWidth: 0,
+                elevation: 0,
+                // height: 60, // Removed to allow auto-sizing for safe areas
+                paddingTop: 8,
+                // paddingBottom: 8, // Let safe area handle bottom padding
+                backgroundColor: '#141E30',
+                minHeight: 60, // Ensure it's not too small on desktop
                 headerStyle: {
                     backgroundColor: '#141E30',
                     elevation: 0,
