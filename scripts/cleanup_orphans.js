@@ -1,5 +1,5 @@
 const { initializeApp } = require('firebase/app');
-const { getFirestore, collection, getDocs, deleteDoc, doc, getDoc } = require('firebase/firestore');
+const { getFirestore, collection, getDocs, doc, getDoc, deleteDoc } = require('firebase/firestore');
 require('dotenv').config();
 
 const firebaseConfig = {
@@ -15,46 +15,38 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-async function cleanupOrphans() {
-    try {
-        console.log('Finding orphaned predictions...');
+async function cleanup() {
+    console.log('Scanning for orphan predictions (ghost votes)...');
 
-        // 1. Get all Markets IDs
-        const marketsRef = collection(db, 'markets');
-        const marketsSnap = await getDocs(marketsRef);
-        const validMarketIds = new Set(marketsSnap.docs.map(d => d.id));
-        console.log(`Valid Market IDs (${validMarketIds.size}):`, [...validMarketIds]);
+    // 1. Get All Profiles (for quick lookup)
+    const profilesSnap = await getDocs(collection(db, 'profiles'));
+    const userIds = new Set(profilesSnap.docs.map(d => d.id));
+    console.log(`Loaded ${userIds.size} valid user profiles.`);
 
-        // 2. Get all Predictions
-        const predsRef = collection(db, 'predictions');
-        const predsSnap = await getDocs(predsRef);
-        console.log(`Total Predictions: ${predsSnap.size}`);
+    // 2. Scan Predictions
+    const predsSnap = await getDocs(collection(db, 'predictions'));
+    console.log(`Scanning ${predsSnap.size} predictions...`);
 
-        const orphans = [];
-        predsSnap.forEach(d => {
-            const data = d.data();
-            if (!validMarketIds.has(data.market_id)) {
-                orphans.push(d);
-            }
-        });
+    let deletedCount = 0;
+    const deletePromises = [];
 
-        console.log(`Found ${orphans.length} orphaned predictions.`);
-
-        if (orphans.length > 0) {
-            const deletePromises = orphans.map(d => {
-                console.log(`Deleting orphan prediction ${d.id} (Market ID: ${d.data().market_id})`);
-                return deleteDoc(doc(db, 'predictions', d.id));
-            });
-            await Promise.all(deletePromises);
-            console.log('Cleanup complete.');
-        } else {
-            console.log('No orphans found.');
+    for (const p of predsSnap.docs) {
+        const data = p.data();
+        if (!userIds.has(data.user_id)) {
+            console.log(`🗑️ Found Orphan: Prediction ${p.id} (User: ${data.user_id})`);
+            deletePromises.push(deleteDoc(doc(db, 'predictions', p.id)));
+            deletedCount++;
         }
-        process.exit(0);
-    } catch (e) {
-        console.error('Error cleaning orphans:', e);
-        process.exit(1);
     }
+
+    if (deletePromises.length > 0) {
+        await Promise.all(deletePromises);
+        console.log(`✅ Deleted ${deletedCount} orphan predictions.`);
+    } else {
+        console.log('✅ No orphans found. Data is clean.');
+    }
+
+    process.exit(0);
 }
 
-cleanupOrphans();
+cleanup();

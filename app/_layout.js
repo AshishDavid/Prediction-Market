@@ -44,20 +44,25 @@ export default function Layout() {
         const inLogin = segments[0] === 'login';
         const inLanding = segments.length === 0 || segments[0] === 'index';
 
+        console.log(`[Layout] User: ${user?.uid}, Segments: ${JSON.stringify(segments)}, InAuth: ${inAuthGroup}, InLanding: ${inLanding}`);
+
         if (!user) {
             // If logged out and trying to access protected routes, redirect to Landing
             if (inAuthGroup) {
+                console.log('[Layout] Not authenticated, redirecting to Landing');
                 router.replace('/');
             }
             // If logged out and on an unknown route (not login, not landing), redirect to Landing
             else if (!inLogin && !inLanding) {
                 router.replace('/');
             }
-        } else if (user) {
+        } else {
             // If logged in and on public routes (Login or Landing), redirect to Dashboard
             if (inLogin || inLanding) {
                 // Only redirect to Tabs if we are NOT in the middle of a signup flow
-                if (!authState.isSigningUp) {
+                // AND double check auth.currentUser to avoid stale state redirects after logout
+                if (!authState.isSigningUp && auth.currentUser) {
+                    console.log('[Layout] Authenticated on public route, redirecting to Dashboard');
                     router.replace('/(tabs)');
                 }
             }

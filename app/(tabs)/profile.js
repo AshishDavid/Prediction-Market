@@ -5,7 +5,7 @@ import { auth, db } from '../../lib/firebase';
 import { doc, getDoc, setDoc, collection, query, where, getDocs, deleteDoc, runTransaction, increment, writeBatch, addDoc, serverTimestamp } from 'firebase/firestore';
 import { getRankName, RANKS } from '../../utils/reputation';
 import { useRouter } from 'expo-router';
-import { ScrollView, TouchableOpacity, Modal, FlatList } from 'react-native';
+import { ScrollView, TouchableOpacity, Modal, FlatList, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import BackgroundLayout from '../../components/BackgroundLayout';
 
@@ -42,7 +42,9 @@ export default function Profile() {
 
     async function handleLogout() {
         await auth.signOut();
-        router.replace('/');
+        if (Platform.OS === 'web') {
+            window.location.href = '/';
+        }
     }
 
     async function handlePruneGhosts() {
@@ -174,29 +176,7 @@ export default function Profile() {
         }
     }
 
-    async function handleSeedIndia() {
-        if (!profile?.is_admin) return;
-        setLoading(true);
-        try {
-            await addDoc(collection(db, 'markets'), {
-                question: "Will India win its next T20 international match?",
-                image: "https://flagcdn.com/w320/in.png",
-                category: "SPORTS",
-                close_time: "2026-01-31T18:29:59.000Z", // Fixed deadline
-                yes_votes: 0,
-                no_votes: 0,
-                vote_count: 0,
-                probability: 50,
-                created_at: serverTimestamp()
-            });
-            Alert.alert('Success', 'India T20 Market created!');
-        } catch (e) {
-            console.error('Seed failed:', e);
-            Alert.alert('Error', e.message);
-        } finally {
-            setLoading(false);
-        }
-    }
+
 
     if (loading) return <BackgroundLayout style={styles.center}><ActivityIndicator color="#69F0AE" /></BackgroundLayout>;
     if (!profile) {

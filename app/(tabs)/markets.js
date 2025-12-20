@@ -27,6 +27,7 @@ export default function MarketList() {
     const [modalVisible, setModalVisible] = useState(false);
     const [newQuestion, setNewQuestion] = useState('');
     const [newSource, setNewSource] = useState('');
+    const [newCategory, setNewCategory] = useState('General');
 
     const [closeDate, setCloseDate] = useState(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -124,7 +125,10 @@ export default function MarketList() {
                 question: newQuestion.trim(),
                 description: newSource || 'User Created',
                 close_time: closeTimeISO,
-                category: selectedCategory === 'All' ? 'General' : selectedCategory,
+                question: newQuestion.trim(),
+                description: newSource || 'User Created',
+                close_time: closeTimeISO,
+                category: newCategory,
                 outcome: null,
                 created_at: new Date().toISOString()
             });
@@ -259,6 +263,30 @@ export default function MarketList() {
                                 value={newSource}
                                 onChangeText={setNewSource}
                             />
+
+                            <Text style={styles.label}>Category</Text>
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+                                {categories.filter(c => c !== 'All').map(cat => (
+                                    <TouchableOpacity
+                                        key={cat}
+                                        onPress={() => setNewCategory(cat)}
+                                        style={{
+                                            paddingHorizontal: 12,
+                                            paddingVertical: 6,
+                                            borderRadius: 16,
+                                            backgroundColor: newCategory === cat ? '#69F0AE' : 'rgba(255,255,255,0.1)',
+                                            borderWidth: 1,
+                                            borderColor: newCategory === cat ? '#69F0AE' : 'rgba(255,255,255,0.1)',
+                                        }}
+                                    >
+                                        <Text style={{
+                                            color: newCategory === cat ? '#141E30' : 'rgba(255,255,255,0.6)',
+                                            fontSize: 12,
+                                            fontFamily: 'Inter_600SemiBold',
+                                        }}>{cat}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
 
                             <Text style={styles.label}>Close Date & Time (Local)</Text>
 
