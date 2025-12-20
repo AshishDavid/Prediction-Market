@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, FlatList, StyleSheet, ActivityIndicator, TextInput, TouchableOpacity } from 'react-native';
 import { db } from '../../lib/firebase';
-import { collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, where, onSnapshot } from 'firebase/firestore';
 import LeaderboardRow from '../../components/LeaderboardRow';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,14 +14,9 @@ export default function Leaderboard() {
     const router = useRouter();
 
     useEffect(() => {
+        let unsubscribe;
+        // Debounce search input to avoid rapid subscription changes
         const timer = setTimeout(() => {
-            fetchLeaderboard();
-        }, 500); // Debounce search
-        return () => clearTimeout(timer);
-    }, [searchQuery]);
-
-    async function fetchLeaderboard() {
-        try {
             setLoading(true);
             const profilesRef = collection(db, 'profiles');
             let q;
@@ -29,7 +24,6 @@ export default function Leaderboard() {
             if (searchQuery.trim()) {
                 // Search Mode
                 const term = searchQuery.trim();
-                // Case-sensitive searching in Firestore is standard.
                 q = query(
                     profilesRef,
                     where('username', '>=', term),
@@ -41,35 +35,43 @@ export default function Leaderboard() {
                 q = query(profilesRef, orderBy('reputation', 'desc'), limit(50));
             }
 
-            const querySnapshot = await getDocs(q);
-            let data = querySnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            // Real-time listener
+            unsubscribe = onSnapshot(q, (snapshot) => {
+                let data = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
 
-            // Client-sort for tie-breaking by seniority (created_at asc)
-            data.sort((a, b) => {
-                const repDiff = (b.reputation || 0) - (a.reputation || 0);
-                if (repDiff !== 0) return repDiff;
-                return new Date(a.created_at || 0) - new Date(b.created_at || 0);
+                // Client-sort for tie-breaking by seniority (created_at asc)
+                data.sort((a, b) => {
+                    const repDiff = (b.reputation || 0) - (a.reputation || 0);
+                    if (repDiff !== 0) return repDiff;
+                    return new Date(a.created_at || 0) - new Date(b.created_at || 0);
+                });
+
+                // Assign Ranks with Ties
+                for (let i = 0; i < data.length; i++) {
+                    if (i > 0 && (data[i].reputation || 0) === (data[i - 1].reputation || 0)) {
+                        data[i].rank = data[i - 1].rank;
+                    } else {
+                        data[i].rank = i + 1;
+                    }
+                }
+
+                setUsers(data);
+                setLoading(false);
+            }, (error) => {
+                console.error('Leaderboard error:', error);
+                setLoading(false);
             });
 
-            // Assign Ranks with Ties
-            for (let i = 0; i < data.length; i++) {
-                if (i > 0 && (data[i].reputation || 0) === (data[i - 1].reputation || 0)) {
-                    data[i].rank = data[i - 1].rank;
-                } else {
-                    data[i].rank = i + 1;
-                }
-            }
+        }, 500);
 
-            setUsers(data);
-        } catch (error) {
-            console.error('Leaderboard error:', error);
-        } finally {
-            setLoading(false);
-        }
-    }
+        return () => {
+            clearTimeout(timer);
+            if (unsubscribe) unsubscribe();
+        };
+    }, [searchQuery]);
 
     return (
         <BackgroundLayout>

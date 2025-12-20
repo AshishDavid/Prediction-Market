@@ -435,8 +435,6 @@ export default function MarketDetail() {
                 >
                     <Ionicons name="arrow-back" size={24} color="#fff" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle} numberOfLines={1}>Market Details</Text>
-                <View style={{ width: 40 }} />
             </View>
 
             <ScrollView
@@ -603,13 +601,12 @@ const styles = StyleSheet.create({
     customHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
         paddingHorizontal: 16,
-        paddingTop: 60,
-        paddingBottom: 20,
+        paddingTop: 50, // Reduced from 60 to move it up slightly
+        paddingBottom: 10,
         backgroundColor: 'transparent',
         zIndex: 10,
-        position: 'absolute', // Make it absolute to overlay content
+        position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
