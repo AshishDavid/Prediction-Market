@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // --- Helper Functions ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // Admin UID (hellraiser / davidashishx@gmail.com)
+    function isAdmin() {
+      return request.auth.uid == "KYxtBiBJAkPzJ2RpjHMYd6TRML53";
+    }
+
+    // --- Rules ---
+
+    // PROFILES
+    // Read: Public (Leaderboard needs this)
+    // Write: Owner (create/edit username) OR Admin (reputation updates)
+    match /profiles/{userId} {
+      allow read: if true;
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    // MARKETS
+    // Read: Public
+    // Create: Admin only
+    // Update: Admin (Resolution) OR Authenticated Users (Voting Stats only)
+    match /markets/{marketId} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (
+        isSignedIn() && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['yes_votes', 'no_votes', 'vote_count', 'probability', 'updated_at'])
+      );
+    }
+
+    // PREDICTIONS
+    // Read: Public (Market details need this)
+    // Write: User can only create/update their own prediction
+    match /predictions/{predictionId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.user_id == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.user_id == request.auth.uid;
+      allow delete: if isAdmin(); // Only admin can delete via cleanup scripts
+    }
+  }
+}

@@ -41,7 +41,7 @@ export default function Profile() {
 
     async function handleLogout() {
         await auth.signOut();
-        router.replace('/login');
+        router.replace('/');
     }
 
     if (loading) return <BackgroundLayout style={styles.center}><ActivityIndicator color="#69F0AE" /></BackgroundLayout>;

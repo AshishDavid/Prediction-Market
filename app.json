@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "prediction-mvp",
-    "slug": "prediction-mvp",
+    "name": "Pulse",
+    "slug": "pulse",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "predictionmvp",
+    "scheme": "pulse",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
