@@ -1,0 +1,9 @@
+
+const admin = require('firebase-admin');
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
+
+const serviceAccount = require('./service-account-key.json'); // Ensure this exists or use logic to find it
+// Actually, usually in these environments we might not have a service account file handy.
+// Let's use the CLIENT SDK script pattern instead if we don't have admin.
+// But the user has `scripts/wipe_markets.js`. Let's check that to see how they connect.

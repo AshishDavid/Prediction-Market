@@ -1,0 +1,6 @@
+services:
+  - type: static
+    name: prediction-market-web
+    env: static
+    buildCommand: npm install && npm run build:web
+    staticPublishPath: dist
