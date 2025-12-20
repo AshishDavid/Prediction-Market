@@ -1,43 +1,74 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper: Admin Check
-    function isAdmin() {
-      return request.auth != null && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.is_admin == true;
-    }
+    // --- Helper Functions ---
 
-    // Helper: Auth Check
+    // Check if the user is authenticated
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // 1. Markets: Public Read
-    match /markets/{marketId} {
-      allow read: if true;
-      
-      // Admin can do anything (create/delete/update)
-      allow write: if isAdmin();
-
-      // Normal Users can UPDATE to increment votes
-      // We block them from changing the Question, Category, or resolving it (Outcome)
-      allow update: if isAuthenticated() 
-        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['question', 'category', 'outcome', 'close_time', 'created_at']));
+    // Check if the user is an Admin (based on their profile document)
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.is_admin == true;
     }
 
-    // 2. Predictions: Public Read, Users can Create/Update their own
-    match /predictions/{predictionId} {
+    // Check if the user is the owner of the document (assuming userId is key or field)
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // --- Rules ---
+
+    // 1. MARKETS collection
+    match /markets/{marketId} {
+      // Anyone can view markets
       allow read: if true;
+
+      // Only Admins can create or delete markets
+      allow create, delete: if isAdmin();
+
+      // Updates:
+      // 1. Admins can update anything (e.g. resolving, fixing typos)
+      // 2. Authenticated Users can update voting stats ONLY (during a transaction)
+      allow update: if isAdmin() || (
+        isAuthenticated() && 
+        // Ensure they are NOT changing critical configuration fields
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['question', 'description', 'category', 'outcome', 'close_time', 'created_at']))
+      );
+    }
+
+    // 2. PREDICTIONS collection
+    match /predictions/{predictionId} {
+      // Public read (needed for detailed stats/graphs/leaderboards)
+      allow read: if true;
+
+      // Create: Users can create a prediction if they tag it with their own user_id
       allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
+
+      // Update: Users can change their vote (flip YES/NO) if they own the prediction
       allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+
+      // Delete: Admins can clean up; Users can arguably delete their own vote if needed (optional)
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.user_id == request.auth.uid);
     }
 
-    // 3. Profiles: Public Read, Owner Write (updates), Admin Write
+    // 3. PROFILES collection
     match /profiles/{userId} {
+      // Public read (needed for username checks during signup & leaderboards)
       allow read: if true;
-      allow create, update: if request.auth != null && request.auth.uid == userId;
-      allow write: if isAdmin();
+
+      // Create: A user can create their own profile document
+      allow create: if isOwner(userId);
+
+      // Update:
+      // 1. Owner can update their own profile (e.g. username/bio)
+      // 2. Admin can update anyone (e.g. adjusting reputation during resolution)
+      allow update: if isOwner(userId) || isAdmin();
     }
   }
 }
