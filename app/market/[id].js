@@ -118,7 +118,6 @@ const MarketChart = ({ marketId, currentProb }) => {
 export default function MarketDetail() {
     const { id } = useLocalSearchParams();
     const navigation = useNavigation();
-    const navigation = useNavigation();
 
     useLayoutEffect(() => {
         navigation.setOptions({
