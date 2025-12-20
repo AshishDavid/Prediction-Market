@@ -1,4 +1,4 @@
-```
+
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Button, Alert } from 'react-native';
 import { auth, db } from '../../lib/firebase';
@@ -58,10 +58,10 @@ export default function Profile() {
             const predsSnap = await getDocs(collection(db, 'predictions'));
             const orphans = [];
             predsSnap.forEach(doc => {
-                 if (!userIds.has(doc.data().user_id)) orphans.push(doc);
+                if (!userIds.has(doc.data().user_id)) orphans.push(doc);
             });
 
-            console.log(`Found ${ orphans.length } orphans.`);
+            console.log(`Found ${orphans.length} orphans.`);
 
             if (orphans.length === 0) {
                 Alert.alert('Clean', 'No ghost votes found.');
@@ -88,7 +88,7 @@ export default function Profile() {
                 });
             }
 
-            Alert.alert('Success', `Deleted ${ orphans.length } ghost votes and updated markets.`);
+            Alert.alert('Success', `Deleted ${orphans.length} ghost votes and updated markets.`);
 
         } catch (e) {
             console.error('Prune failed:', e);
