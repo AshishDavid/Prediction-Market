@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Button, Alert } from 'react-native';
 import { auth, db } from '../../lib/firebase';
-import { doc, getDoc, setDoc, collection, query, where, getDocs, deleteDoc, runTransaction, increment } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs, deleteDoc, runTransaction, increment, writeBatch } from 'firebase/firestore';
 import { getRankName, RANKS } from '../../utils/reputation';
 import { useRouter } from 'expo-router';
 import { ScrollView, TouchableOpacity, Modal, FlatList } from 'react-native';
@@ -175,6 +175,11 @@ export default function Profile() {
                             <TouchableOpacity onPress={handlePruneGhosts} style={styles.adminButton}>
                                 <Ionicons name="bug-outline" size={20} color="#fff" />
                                 <Text style={styles.adminBtnText}>Prune Ghost Votes</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity onPress={handleRecalcStats} style={[styles.adminButton, { marginTop: 10, backgroundColor: 'rgba(105, 240, 174, 0.2)', borderColor: '#69F0AE' }]}>
+                                <Ionicons name="refresh-outline" size={20} color="#fff" />
+                                <Text style={[styles.adminBtnText, { color: '#69F0AE' }]}>Recalculate Stats</Text>
                             </TouchableOpacity>
                         </View>
                     )}
