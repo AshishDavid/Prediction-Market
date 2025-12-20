@@ -265,10 +265,7 @@ export default function Profile() {
                                 <Text style={[styles.adminBtnText, { color: '#69F0AE' }]}>Recalculate Stats</Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity onPress={handleSeedIndia} style={[styles.adminButton, { marginTop: 10, backgroundColor: 'rgba(41, 121, 255, 0.2)', borderColor: '#2979FF' }]}>
-                                <Ionicons name="add-circle-outline" size={20} color="#fff" />
-                                <Text style={[styles.adminBtnText, { color: '#2979FF' }]}>Restock: India T20</Text>
-                            </TouchableOpacity>
+
                         </View>
                     )}
                 </View>
