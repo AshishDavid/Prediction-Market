@@ -18,21 +18,25 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // 2. Predictions: Public Read, auth users can create, but not edit (unless admin)
+    // 2. Predictions: Public Read, Users can Create/Update their own
     match /predictions/{predictionId} {
       allow read: if true;
+      
       // Allow creation if user is authenticated and sets strictly their own user_id
       allow create: if isAuthenticated() && request.resource.data.user_id == request.auth.uid;
-      // Allow deleting if admin (for cleanup)
-      allow delete: if isAdmin();
-      // No updates allowed (avoids changing votes)
+      
+      // Allow update if user owns the prediction (to change vote)
+      allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      
+      // Allow deleting if admin (for cleanup) or owner (if we wanted retracting, but let's stick to admin/owner)
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.user_id == request.auth.uid);
     }
 
     // 3. Profiles: Public Read, Owner Write (updates), Admin Write
     match /profiles/{userId} {
       allow read: if true;
       allow create, update: if request.auth != null && request.auth.uid == userId;
-      allow write: if isAdmin(); // Admin can prune/edit profiles if needed
+      allow write: if isAdmin();
     }
   }
 }
