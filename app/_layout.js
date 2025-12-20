@@ -40,14 +40,26 @@ export default function Layout() {
     useEffect(() => {
         if (!initialized) return;
 
+        const inAuthGroup = segments[0] === '(tabs)';
         const inLogin = segments[0] === 'login';
+        const inLanding = segments.length === 0 || segments[0] === 'index';
 
-        if (!user && !inLogin) {
-            router.replace('/login');
-        } else if (user && inLogin) {
-            // Only redirect to Tabs if we are NOT in the middle of a signup flow
-            if (!authState.isSigningUp) {
-                router.replace('/(tabs)');
+        if (!user) {
+            // If logged out and trying to access protected routes, redirect to Landing
+            if (inAuthGroup) {
+                router.replace('/');
+            }
+            // If logged out and on an unknown route (not login, not landing), redirect to Landing
+            else if (!inLogin && !inLanding) {
+                router.replace('/');
+            }
+        } else if (user) {
+            // If logged in and on public routes (Login or Landing), redirect to Dashboard
+            if (inLogin || inLanding) {
+                // Only redirect to Tabs if we are NOT in the middle of a signup flow
+                if (!authState.isSigningUp) {
+                    router.replace('/(tabs)');
+                }
             }
         }
     }, [user, initialized, segments]);
