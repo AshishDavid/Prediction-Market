@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Button, Alert } from 'react-native';
 import { auth, db } from '../../lib/firebase';
-import { doc, getDoc, setDoc, collection, query, where, getDocs, deleteDoc, runTransaction, increment, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs, deleteDoc, runTransaction, increment, writeBatch, addDoc, serverTimestamp } from 'firebase/firestore';
 import { getRankName, RANKS } from '../../utils/reputation';
 import { useRouter } from 'expo-router';
 import { ScrollView, TouchableOpacity, Modal, FlatList } from 'react-native';
@@ -115,6 +115,89 @@ export default function Profile() {
         }
     }
 
+    async function handleRecalcStats() {
+        if (!profile?.is_admin) return;
+        setLoading(true);
+        try {
+            console.log('Recalculating Stats...');
+            const marketsRef = collection(db, 'markets');
+            const marketsSnap = await getDocs(marketsRef);
+
+            const predsRef = collection(db, 'predictions');
+            const predsSnap = await getDocs(predsRef);
+
+            const stats = {};
+            predsSnap.forEach(p => {
+                const d = p.data();
+                if (!stats[d.market_id]) stats[d.market_id] = { yes: 0, no: 0 };
+                if (d.vote === 'YES') stats[d.market_id].yes++;
+                else if (d.vote === 'NO') stats[d.market_id].no++;
+            });
+
+            const batch = writeBatch(db);
+            let count = 0;
+
+            console.log(`Processing ${marketsSnap.size} markets...`);
+
+            // Cannot use forEach with await directly if we were doing async inside, but batch is sync prep.
+            marketsSnap.docs.forEach(mDoc => {
+                const mId = mDoc.id;
+                const current = mDoc.data();
+                const s = stats[mId] || { yes: 0, no: 0 };
+                const total = s.yes + s.no;
+                const prob = total > 0 ? (s.yes / total) * 100 : 50;
+
+                if (current.yes_votes !== s.yes || current.no_votes !== s.no || current.probability !== prob) {
+                    batch.update(mDoc.ref, {
+                        yes_votes: s.yes,
+                        no_votes: s.no,
+                        vote_count: total,
+                        probability: prob,
+                        updated_at: new Date().toISOString()
+                    });
+                    count++;
+                }
+            });
+
+            if (count > 0) {
+                await batch.commit();
+                Alert.alert('Success', `Updated stats for ${count} markets.`);
+            } else {
+                Alert.alert('Clean', 'All market stats are correct.');
+            }
+
+        } catch (e) {
+            console.error('Recalc failed:', e);
+            Alert.alert('Error', e.message);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleSeedIndia() {
+        if (!profile?.is_admin) return;
+        setLoading(true);
+        try {
+            await addDoc(collection(db, 'markets'), {
+                question: "Will India win its next T20 international match?",
+                image: "https://flagcdn.com/w320/in.png",
+                category: "SPORTS",
+                close_time: "2026-01-31T18:29:59.000Z", // Fixed deadline
+                yes_votes: 0,
+                no_votes: 0,
+                vote_count: 0,
+                probability: 50,
+                created_at: serverTimestamp()
+            });
+            Alert.alert('Success', 'India T20 Market created!');
+        } catch (e) {
+            console.error('Seed failed:', e);
+            Alert.alert('Error', e.message);
+        } finally {
+            setLoading(false);
+        }
+    }
+
     if (loading) return <BackgroundLayout style={styles.center}><ActivityIndicator color="#69F0AE" /></BackgroundLayout>;
     if (!profile) {
         return (
@@ -180,6 +263,11 @@ export default function Profile() {
                             <TouchableOpacity onPress={handleRecalcStats} style={[styles.adminButton, { marginTop: 10, backgroundColor: 'rgba(105, 240, 174, 0.2)', borderColor: '#69F0AE' }]}>
                                 <Ionicons name="refresh-outline" size={20} color="#fff" />
                                 <Text style={[styles.adminBtnText, { color: '#69F0AE' }]}>Recalculate Stats</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity onPress={handleSeedIndia} style={[styles.adminButton, { marginTop: 10, backgroundColor: 'rgba(41, 121, 255, 0.2)', borderColor: '#2979FF' }]}>
+                                <Ionicons name="add-circle-outline" size={20} color="#fff" />
+                                <Text style={[styles.adminBtnText, { color: '#2979FF' }]}>Restock: India T20</Text>
                             </TouchableOpacity>
                         </View>
                     )}

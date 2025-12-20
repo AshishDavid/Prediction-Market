@@ -2,7 +2,7 @@ import React, { useEffect, useState, useLayoutEffect, useCallback } from 'react'
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, RefreshControl, Dimensions, Alert, Modal } from 'react-native';
 import { useLocalSearchParams, useNavigation, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, getDoc, collection, addDoc, serverTimestamp, query, where, getDocs, updateDoc, runTransaction, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, serverTimestamp, query, where, getDocs, updateDoc, runTransaction, setDoc, onSnapshot, writeBatch, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../../lib/firebase';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import BackgroundLayout from '../../components/BackgroundLayout';
@@ -399,6 +399,91 @@ export default function MarketDetail() {
             setResolving(false);
         }
     };
+
+    async function handleResetMarket() {
+        if (!isAdmin) return;
+
+        Alert.alert(
+            "Reset Market",
+            "This will clear all votes, reset probability to 50%, and remove the outcome. This cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Reset",
+                    style: "destructive",
+                    onPress: async () => {
+                        setLoading(true);
+                        try {
+                            // 1. Reset Market Stats
+                            await updateDoc(doc(db, 'markets', id), {
+                                yes_votes: 0,
+                                no_votes: 0,
+                                vote_count: 0,
+                                probability: 50,
+                                outcome: null,
+                                updated_at: new Date().toISOString()
+                            });
+
+                            // 2. Delete Predictions
+                            const q = query(collection(db, 'predictions'), where('market_id', '==', id));
+                            const snapshot = await getDocs(q);
+                            const batch = writeBatch(db);
+                            snapshot.forEach(doc => {
+                                batch.delete(doc.ref);
+                            });
+                            await batch.commit();
+
+                            Alert.alert("Success", "Market has been reset.");
+                            router.replace('/(tabs)');
+                        } catch (e) {
+                            console.error("Reset failed:", e);
+                            Alert.alert("Error", e.message);
+                            setLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
+    }
+
+    async function handleDeleteMarket() {
+        if (!isAdmin) return;
+
+        Alert.alert(
+            "Delete Market",
+            "Are you surely you want to PERMANENTLY DELETE this market?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                        setLoading(true);
+                        try {
+                            // 1. Delete Predictions
+                            const q = query(collection(db, 'predictions'), where('market_id', '==', id));
+                            const snapshot = await getDocs(q);
+                            const batch = writeBatch(db);
+                            snapshot.forEach(doc => {
+                                batch.delete(doc.ref);
+                            });
+                            await batch.commit();
+
+                            // 2. Delete Market
+                            await deleteDoc(doc(db, 'markets', id));
+
+                            Alert.alert("Deleted", "Market gone.");
+                            router.replace('/(tabs)');
+                        } catch (e) {
+                            console.error("Delete failed:", e);
+                            Alert.alert("Error", e.message);
+                            setLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
+    }
 
     if (loading) return <BackgroundLayout style={styles.center}><ActivityIndicator color="#69F0AE" /></BackgroundLayout>;
     if (!market) return <BackgroundLayout style={styles.center}><Text style={{ color: '#fff', fontFamily: 'Inter_600SemiBold' }}>Market not found</Text></BackgroundLayout>;
