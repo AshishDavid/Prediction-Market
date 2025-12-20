@@ -74,6 +74,7 @@ export default function Layout() {
                 contentStyle: { backgroundColor: '#141E30' }
             }}
         >
+            <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="market/[id]" options={{ title: '', headerBackTitle: 'Back' }} />
             <Stack.Screen name="user/[id]" options={{ title: '', headerBackTitle: 'Back', headerTransparent: true }} />
