@@ -421,8 +421,18 @@ export default function MarketDetail() {
     return (
         <BackgroundLayout>
             {/* Custom Header */}
+            {/* Custom Header */}
             <View style={styles.customHeader}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <TouchableOpacity
+                    onPress={() => {
+                        if (router.canGoBack()) {
+                            router.back();
+                        } else {
+                            router.replace('/(tabs)');
+                        }
+                    }}
+                    style={styles.backButton}
+                >
                     <Ionicons name="arrow-back" size={24} color="#fff" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle} numberOfLines={1}>Market Details</Text>
