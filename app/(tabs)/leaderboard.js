@@ -5,9 +5,11 @@ import { collection, query, orderBy, limit, getDocs, where, onSnapshot } from 'f
 import LeaderboardRow from '../../components/LeaderboardRow';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useHeaderHeight } from '@react-navigation/elements';
 import BackgroundLayout from '../../components/BackgroundLayout';
 
 export default function Leaderboard() {
+    const headerHeight = useHeaderHeight();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -75,7 +77,7 @@ export default function Leaderboard() {
 
     return (
         <BackgroundLayout>
-            <View style={styles.container}>
+            <View style={[styles.container, { paddingTop: headerHeight }]}>
                 <View style={styles.responsiveContent}>
                     {/* Search Bar */}
                     <View style={styles.searchContainer}>
@@ -91,7 +93,7 @@ export default function Leaderboard() {
                     </View>
 
                     {loading ? (
-                        <ActivityIndicator style={{ marginTop: 20 }} color="#69F0AE" />
+                        <ActivityIndicator style={{ marginTop: 20 }} color="#5EEAD4" />
                     ) : (
                         <FlatList
                             data={users}
@@ -100,6 +102,7 @@ export default function Leaderboard() {
                                 <LeaderboardRow
                                     user={item}
                                     rank={item.rank}
+                                    position={index}
                                     onPress={() => router.push(`/user/${item.id}`)}
                                 />
                             )}

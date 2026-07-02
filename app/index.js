@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import BackgroundLayout from '../components/BackgroundLayout';
-
-const { width } = Dimensions.get('window');
+import GradientButton from '../components/GradientButton';
+import { Colors, Radius } from '../constants/theme';
 
 export default function LandingPage() {
     const router = useRouter();
@@ -18,7 +19,7 @@ export default function LandingPage() {
                 {/* Hero Section */}
                 <View style={styles.hero}>
                     <View style={styles.logoContainer}>
-                        <Ionicons name="pulse" size={80} color="#69F0AE" />
+                        <Ionicons name="pulse" size={72} color={Colors.dark.accent} />
                     </View>
                     <Text style={styles.title}>Pulse</Text>
                     <Text style={styles.subtitle}>
@@ -29,10 +30,11 @@ export default function LandingPage() {
                     </Text>
 
                     <Link href="/login" asChild>
-                        <TouchableOpacity style={styles.ctaButton}>
-                            <Text style={styles.ctaText}>Get Started</Text>
-                            <Ionicons name="arrow-forward" size={20} color="#141E30" />
-                        </TouchableOpacity>
+                        <GradientButton
+                            title="Get Started"
+                            icon={<Ionicons name="arrow-forward" size={20} color={Colors.dark.onAccent} />}
+                            style={styles.ctaButton}
+                        />
                     </Link>
                 </View>
 
@@ -78,13 +80,18 @@ export default function LandingPage() {
 
 function FeatureCard({ icon, title, desc }) {
     return (
-        <View style={styles.card}>
+        <Pressable style={({ hovered }) => [styles.card, hovered && styles.cardHovered]}>
             <View style={styles.iconBox}>
-                <Ionicons name={icon} size={24} color="#69F0AE" />
+                <LinearGradient
+                    colors={['rgba(94,234,212,0.28)', 'rgba(94,234,212,0.04)']}
+                    style={styles.iconBoxGradient}
+                >
+                    <Ionicons name={icon} size={24} color={Colors.dark.accent} />
+                </LinearGradient>
             </View>
             <Text style={styles.cardTitle}>{title}</Text>
             <Text style={styles.cardDesc}>{desc}</Text>
-        </View>
+        </Pressable>
     );
 }
 
@@ -97,66 +104,53 @@ const styles = StyleSheet.create({
     },
     hero: {
         alignItems: 'center',
-        marginBottom: 60,
+        marginBottom: 64,
         maxWidth: 600,
         width: '100%',
     },
     logoContainer: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        backgroundColor: 'rgba(105, 240, 174, 0.1)',
+        width: 112,
+        height: 112,
+        borderRadius: 56,
+        backgroundColor: 'rgba(94, 234, 212, 0.08)',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: 28,
         borderWidth: 1,
-        borderColor: 'rgba(105, 240, 174, 0.3)',
-        shadowColor: '#69F0AE',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 20,
+        borderColor: 'rgba(94, 234, 212, 0.25)',
+        shadowColor: Colors.dark.glowTeal,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.5,
+        shadowRadius: 30,
+        elevation: 10,
     },
     title: {
-        fontSize: 48,
+        fontSize: 52,
         fontFamily: 'Inter_900Black',
         color: '#fff',
         marginBottom: 12,
-        letterSpacing: -1,
+        letterSpacing: -1.5,
     },
     subtitle: {
         fontSize: 18,
         fontFamily: 'Inter_600SemiBold',
-        color: '#69F0AE',
+        color: Colors.dark.accent,
         marginBottom: 24,
         textAlign: 'center',
     },
     description: {
         fontSize: 16,
         fontFamily: 'Inter_400Regular',
-        color: 'rgba(255, 255, 255, 0.7)',
+        color: Colors.dark.textSecondary,
         textAlign: 'center',
-        lineHeight: 24,
+        lineHeight: 25,
         marginBottom: 40,
         maxWidth: 400,
     },
     ctaButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#69F0AE',
-        paddingVertical: 16,
-        paddingHorizontal: 40,
-        borderRadius: 30,
-        shadowColor: '#69F0AE',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 5,
-        gap: 10,
-    },
-    ctaText: {
-        color: '#141E30',
-        fontSize: 18,
-        fontFamily: 'Inter_700Bold',
+        paddingHorizontal: 24,
+        alignSelf: 'center',
+        minWidth: 220,
     },
     featuresContainer: {
         width: '100%',
@@ -179,22 +173,32 @@ const styles = StyleSheet.create({
     card: {
         width: '100%',
         maxWidth: 350,
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        borderRadius: 20,
+        backgroundColor: Colors.dark.surface,
+        borderRadius: Radius.xl,
         padding: 24,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: Colors.dark.border,
+        borderTopColor: Colors.dark.surfaceHighlight,
         minWidth: 280,
         flexGrow: 1,
+        // @ts-ignore web-only transition, harmless no-op on native
+        transitionDuration: '200ms',
+    },
+    cardHovered: {
+        backgroundColor: Colors.dark.surfaceElevated,
+        borderColor: Colors.dark.borderStrong,
     },
     iconBox: {
-        width: 50,
-        height: 50,
-        borderRadius: 15,
-        backgroundColor: 'rgba(105, 240, 174, 0.1)',
+        width: 52,
+        height: 52,
+        borderRadius: Radius.md,
+        marginBottom: 16,
+        overflow: 'hidden',
+    },
+    iconBoxGradient: {
+        flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 16,
     },
     cardTitle: {
         fontSize: 18,
@@ -205,7 +209,7 @@ const styles = StyleSheet.create({
     cardDesc: {
         fontSize: 14,
         fontFamily: 'Inter_400Regular',
-        color: 'rgba(255, 255, 255, 0.6)',
+        color: Colors.dark.textSecondary,
         lineHeight: 20,
     },
     footer: {
@@ -215,7 +219,7 @@ const styles = StyleSheet.create({
     legalText: {
         fontSize: 12,
         fontFamily: 'Inter_400Regular',
-        color: 'rgba(255, 255, 255, 0.4)',
+        color: Colors.dark.textTertiary,
         textAlign: 'center',
         marginBottom: 12,
         maxWidth: 500,

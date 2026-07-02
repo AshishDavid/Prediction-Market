@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { Link, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../lib/firebase';
 import {
     collection,
@@ -13,6 +14,8 @@ import {
     limit
 } from 'firebase/firestore';
 import BackgroundLayout from '../../components/BackgroundLayout';
+import GradientButton from '../../components/GradientButton';
+import { Colors, Radius } from '../../constants/theme';
 
 export default function HomeScreen() {
     const [user, setUser] = useState(null);
@@ -156,7 +159,8 @@ export default function HomeScreen() {
                     {/* Featured Card */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
-                            <Text style={styles.trendingLabel}>🔥 TRENDING NOW</Text>
+                            <Ionicons name="flame" size={14} color={Colors.dark.accent} />
+                            <Text style={styles.trendingLabel}>TRENDING NOW</Text>
                         </View>
                         <Text style={styles.marketQuestion} numberOfLines={2}>{displayFeatured.question}</Text>
 
@@ -167,7 +171,7 @@ export default function HomeScreen() {
                             </View>
                             <View style={styles.chartPlaceholder}>
                                 <Text style={{
-                                    color: isFeatUp === null ? 'rgba(255,255,255,0.5)' : (isFeatUp ? '#69F0AE' : '#FF5252'),
+                                    color: isFeatUp === null ? Colors.dark.textSecondary : (isFeatUp ? Colors.dark.accent : Colors.dark.danger),
                                     fontFamily: 'Inter_700Bold',
                                     fontSize: 16
                                 }}>
@@ -178,9 +182,7 @@ export default function HomeScreen() {
 
                         {displayFeatured.id && (
                             <Link href={`/market/${displayFeatured.id}`} asChild>
-                                <TouchableOpacity style={styles.actionBtn}>
-                                    <Text style={styles.actionBtnText}>Vote</Text>
-                                </TouchableOpacity>
+                                <GradientButton title="Vote" style={styles.actionBtn} textStyle={styles.actionBtnText} />
                             </Link>
                         )}
                     </View>
@@ -190,7 +192,7 @@ export default function HomeScreen() {
                     </View>
 
                     {loading && !refreshing ? (
-                        <ActivityIndicator color="#69F0AE" />
+                        <ActivityIndicator color="#5EEAD4" />
                     ) : portfolio.length === 0 ? (
                         <View style={[styles.card, { alignItems: 'center', justifyContent: 'center', borderStyle: 'dashed' }]}>
                             <Text style={{ color: 'rgba(255,255,255,0.5)', fontFamily: 'Inter_400Regular', marginBottom: 10 }}>
@@ -212,13 +214,13 @@ export default function HomeScreen() {
                             const isResolved = marketData.outcome !== null && marketData.outcome !== undefined;
 
                             let statusLabel = isClosed ? 'CLOSED' : 'OPEN';
-                            let statusColor = isClosed ? 'rgba(255,255,255,0.5)' : '#69F0AE';
+                            let statusColor = isClosed ? 'rgba(255,255,255,0.5)' : '#5EEAD4';
 
                             if (isResolved) {
                                 const outcomeYes = marketData.outcome === true;
                                 const userWon = (isYes && outcomeYes) || (!isYes && !outcomeYes);
                                 statusLabel = userWon ? 'WON' : 'LOST';
-                                statusColor = userWon ? '#FFD700' : '#FF5252';
+                                statusColor = userWon ? '#FFD700' : '#FB7185';
                             }
 
                             return (
@@ -233,12 +235,12 @@ export default function HomeScreen() {
                                                     {new Date(item.updated_at).toLocaleDateString()}
                                                 </Text>
                                                 <View style={{ backgroundColor: statusColor, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                                                    <Text style={{ color: '#141E30', fontSize: 10, fontFamily: 'Inter_700Bold' }}>{statusLabel}</Text>
+                                                    <Text style={{ color: '#08201C', fontSize: 10, fontFamily: 'Inter_700Bold' }}>{statusLabel}</Text>
                                                 </View>
                                             </View>
                                         </View>
                                         <View style={[styles.badge, { backgroundColor: isYes ? 'rgba(105, 240, 174, 0.2)' : 'rgba(255, 82, 82, 0.2)' }]}>
-                                            <Text style={[styles.badgeText, { color: isYes ? '#69F0AE' : '#FF5252' }]}>
+                                            <Text style={[styles.badgeText, { color: isYes ? '#5EEAD4' : '#FB7185' }]}>
                                                 {isYes ? 'YES' : 'NO'}
                                             </Text>
                                         </View>
@@ -281,24 +283,28 @@ const styles = StyleSheet.create({
         color: '#fff',
     },
     card: {
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        borderRadius: 20,
+        backgroundColor: Colors.dark.surface,
+        borderRadius: Radius.xl,
         padding: 24,
         marginBottom: 32,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        shadowColor: '#00C853',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
+        borderColor: Colors.dark.border,
+        borderTopColor: Colors.dark.surfaceHighlight,
+        shadowColor: Colors.dark.glowTeal,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.12,
+        shadowRadius: 24,
     },
     cardHeader: {
         marginBottom: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
     },
     trendingLabel: {
         fontSize: 12,
         fontFamily: 'Inter_700Bold',
-        color: '#69F0AE',
+        color: Colors.dark.accent,
         letterSpacing: 1,
     },
     marketQuestion: {
@@ -329,15 +335,8 @@ const styles = StyleSheet.create({
     chartPlaceholder: {
         justifyContent: 'flex-end',
     },
-    actionBtn: {
-        backgroundColor: '#69F0AE',
-        paddingVertical: 12,
-        borderRadius: 24,
-        alignItems: 'center',
-    },
+    actionBtn: {},
     actionBtnText: {
-        color: '#141E30',
-        fontFamily: 'Inter_700Bold',
         fontSize: 14,
     },
     sectionHeader: {
@@ -349,15 +348,16 @@ const styles = StyleSheet.create({
         color: '#fff',
     },
     positionCard: {
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        backgroundColor: Colors.dark.surface,
         padding: 16,
         marginBottom: 10,
-        borderRadius: 16,
+        borderRadius: Radius.lg,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: Colors.dark.border,
+        borderTopColor: Colors.dark.surfaceHighlight,
     },
     positionTitle: {
         fontSize: 16,

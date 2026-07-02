@@ -7,9 +7,11 @@ import { getRankName, RANKS } from '../../utils/reputation';
 import { useRouter } from 'expo-router';
 import { ScrollView, TouchableOpacity, Modal, FlatList, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useHeaderHeight } from '@react-navigation/elements';
 import BackgroundLayout from '../../components/BackgroundLayout';
 
 export default function Profile() {
+    const headerHeight = useHeaderHeight();
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
     const [rankModalVisible, setRankModalVisible] = useState(false);
@@ -178,11 +180,11 @@ export default function Profile() {
 
 
 
-    if (loading) return <BackgroundLayout style={styles.center}><ActivityIndicator color="#69F0AE" /></BackgroundLayout>;
+    if (loading) return <BackgroundLayout style={styles.center}><ActivityIndicator color="#5EEAD4" /></BackgroundLayout>;
     if (!profile) {
         return (
             <BackgroundLayout style={[styles.center, { padding: 20 }]}>
-                <Ionicons name="alert-circle-outline" size={60} color="#FF5252" />
+                <Ionicons name="alert-circle-outline" size={60} color="#FB7185" />
                 <Text style={[styles.username, { marginTop: 20, textAlign: 'center' }]}>Profile Not Found</Text>
                 <Text style={{ color: '#fff', textAlign: 'center', marginBottom: 20, opacity: 0.7 }}>
                     Your account data might have been deleted. Please log out and sign up again.
@@ -198,7 +200,7 @@ export default function Profile() {
         <BackgroundLayout>
             <ScrollView
                 style={styles.container}
-                contentContainerStyle={styles.scrollContent}
+                contentContainerStyle={[styles.scrollContent, { paddingTop: headerHeight + 20 }]}
             >
                 <View style={styles.responsiveContent}>
                     <View style={styles.header}>
@@ -240,9 +242,9 @@ export default function Profile() {
                                 <Text style={styles.adminBtnText}>Prune Ghost Votes</Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity onPress={handleRecalcStats} style={[styles.adminButton, { marginTop: 10, backgroundColor: 'rgba(105, 240, 174, 0.2)', borderColor: '#69F0AE' }]}>
+                            <TouchableOpacity onPress={handleRecalcStats} style={[styles.adminButton, { marginTop: 10, backgroundColor: 'rgba(105, 240, 174, 0.2)', borderColor: '#5EEAD4' }]}>
                                 <Ionicons name="refresh-outline" size={20} color="#fff" />
-                                <Text style={[styles.adminBtnText, { color: '#69F0AE' }]}>Recalculate Stats</Text>
+                                <Text style={[styles.adminBtnText, { color: '#5EEAD4' }]}>Recalculate Stats</Text>
                             </TouchableOpacity>
 
 
@@ -276,10 +278,10 @@ export default function Profile() {
                                     return (
                                         <View style={[styles.rankRow, isCurrent && styles.activeRankRow]}>
                                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                                                <Text style={[styles.rankIndex, isCurrent && { color: '#69F0AE' }]}>#{index + 1}</Text>
+                                                <Text style={[styles.rankIndex, isCurrent && { color: '#5EEAD4' }]}>#{index + 1}</Text>
                                                 <Text style={[styles.rankName, isCurrent && { color: '#fff', fontSize: 16 }]}>{item}</Text>
                                             </View>
-                                            <Text style={[styles.rankPoints, isCurrent && { color: '#69F0AE' }]}>{minScore}+ pts</Text>
+                                            <Text style={[styles.rankPoints, isCurrent && { color: '#5EEAD4' }]}>{minScore}+ pts</Text>
                                         </View>
                                     );
                                 }}
@@ -321,7 +323,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 20,
         borderWidth: 2,
-        borderColor: '#69F0AE',
+        borderColor: '#5EEAD4',
     },
     avatarText: {
         color: '#fff',
@@ -344,7 +346,7 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(105, 240, 174, 0.3)',
     },
     badgeText: {
-        color: '#69F0AE',
+        color: '#5EEAD4',
         fontFamily: 'Inter_700Bold',
         fontSize: 14,
     },
@@ -368,7 +370,7 @@ const styles = StyleSheet.create({
         borderRadius: 30,
     },
     logoutBtnText: {
-        color: '#FF5252',
+        color: '#FB7185',
         fontFamily: 'Inter_700Bold',
         fontSize: 16,
     },
@@ -382,7 +384,7 @@ const styles = StyleSheet.create({
         borderRadius: 25,
     },
     logoutText: { // This style is for the "Profile Not Found" screen
-        color: '#FF5252',
+        color: '#FB7185',
         fontWeight: 'bold',
         fontSize: 16,
     },
@@ -444,7 +446,7 @@ const styles = StyleSheet.create({
         width: '90%',
         maxWidth: 500,
         height: '70%',
-        backgroundColor: '#1E2A38',
+        backgroundColor: '#161F32',
         borderRadius: 20,
         padding: 24,
         borderWidth: 1,

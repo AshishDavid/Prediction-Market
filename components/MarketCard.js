@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Link } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth } from '../lib/firebase';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { Colors, Radius } from '../constants/theme';
 
 export default function MarketCard({ market, isAdmin }) {
     const { id, question, close_time } = market;
@@ -14,10 +15,11 @@ export default function MarketCard({ market, isAdmin }) {
     const voteCount = market.vote_count || 0;
     const isClosed = new Date(close_time) < new Date();
     const isHigh = probability > 50;
-    const trendColor = isHigh ? '#69F0AE' : '#FF5252'; // Lighter Green vs Red for Dark Mode
+    const trendColor = isHigh ? Colors.dark.accent : Colors.dark.danger;
+    const gradientId = `spark-${id}`;
 
     // Generate simplified sparkline path
-    const sparklinePath = useMemo(() => {
+    const { linePath, fillPath } = useMemo(() => {
         // Mock data points based on current probability
         const points = [
             probability - 10 + Math.random() * 5,
@@ -32,21 +34,29 @@ export default function MarketCard({ market, isAdmin }) {
         const max = Math.max(...points) + 5;
         const range = max - min || 1;
 
-        // Scale simplified X and Y
-        return points.map((val, index) => {
-            const x = (index / (points.length - 1)) * width;
-            const y = height - ((val - min) / range) * height;
-            return `${index === 0 ? 'M' : 'L'} ${x},${y}`;
-        }).join(' ');
+        const coords = points.map((val, index) => ({
+            x: (index / (points.length - 1)) * width,
+            y: height - ((val - min) / range) * height,
+        }));
+
+        const line = coords.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ');
+        const fill = `${line} L ${width},${height} L 0,${height} Z`;
+
+        return { linePath: line, fillPath: fill };
     }, [probability]);
 
     return (
         <Link href={`/market/${id}`} asChild>
-            <TouchableOpacity style={styles.card}>
+            <Pressable style={({ hovered, pressed }) => [
+                styles.card,
+                hovered && styles.cardHovered,
+                pressed && styles.cardPressed,
+            ]}>
                 <View style={styles.topRow}>
                     <View style={styles.infoCol}>
                         <Text style={styles.question} numberOfLines={2}>{question}</Text>
                         <View style={styles.metaRow}>
+                            <View style={[styles.statusDot, { backgroundColor: isClosed ? Colors.dark.textTertiary : Colors.dark.accent }]} />
                             <Text style={styles.metaText}>{isClosed ? 'CLOSED' : 'OPEN'}</Text>
                             {isAdmin && (
                                 <>
@@ -61,10 +71,19 @@ export default function MarketCard({ market, isAdmin }) {
                     </View>
                     <View style={styles.chartCol}>
                         <Svg width="80" height="40">
+                            <Defs>
+                                <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                                    <Stop offset="0" stopColor={trendColor} stopOpacity={0.35} />
+                                    <Stop offset="1" stopColor={trendColor} stopOpacity={0} />
+                                </LinearGradient>
+                            </Defs>
+                            <Path d={fillPath} fill={`url(#${gradientId})`} />
                             <Path
-                                d={sparklinePath}
+                                d={linePath}
                                 stroke={trendColor}
                                 strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
                                 fill="none"
                             />
                         </Svg>
@@ -81,21 +100,31 @@ export default function MarketCard({ market, isAdmin }) {
                         />
                     </View>
                 </View>
-            </TouchableOpacity>
+            </Pressable>
         </Link>
     );
 }
 
 const styles = StyleSheet.create({
     card: {
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        backgroundColor: Colors.dark.surface,
         paddingVertical: 16,
         paddingHorizontal: 16,
         marginBottom: 12,
-        borderRadius: 16,
+        borderRadius: Radius.lg,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: Colors.dark.border,
+        borderTopColor: Colors.dark.surfaceHighlight,
         marginHorizontal: 16, // Add margin if full width list
+        // @ts-ignore web-only transition, harmless no-op on native
+        transitionDuration: '150ms',
+    },
+    cardHovered: {
+        backgroundColor: Colors.dark.surfaceElevated,
+        borderColor: Colors.dark.borderStrong,
+    },
+    cardPressed: {
+        backgroundColor: Colors.dark.surfacePressed,
     },
     topRow: {
         flexDirection: 'row',
@@ -117,16 +146,22 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         marginBottom: 4,
+        gap: 6,
+    },
+    statusDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
     },
     metaText: {
         fontSize: 12,
-        color: 'rgba(255, 255, 255, 0.5)',
+        color: Colors.dark.textSecondary,
         fontFamily: 'Inter_600SemiBold',
         letterSpacing: 0.5,
     },
     dateText: {
         fontSize: 10,
-        color: 'rgba(255, 255, 255, 0.4)',
+        color: Colors.dark.textTertiary,
         marginTop: 4,
         fontFamily: 'Inter_400Regular',
     },

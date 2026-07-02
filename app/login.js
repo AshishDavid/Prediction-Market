@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { auth, db, authState } from '../lib/firebase';
 import {
     createUserWithEmailAndPassword,
@@ -11,6 +11,8 @@ import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import BackgroundLayout from '../components/BackgroundLayout';
+import GradientButton from '../components/GradientButton';
+import { Colors, Radius } from '../constants/theme';
 
 export default function Login() {
     const [email, setEmail] = useState('');
@@ -150,7 +152,7 @@ export default function Login() {
                         {/* Logo or Icon */}
                         <View style={styles.iconContainer}>
                             <View style={styles.iconCircle}>
-                                <Ionicons name="pulse" size={60} color="#69F0AE" />
+                                <Ionicons name="pulse" size={60} color={Colors.dark.accent} />
                             </View>
                         </View>
 
@@ -204,24 +206,17 @@ export default function Login() {
 
                             {errorMsg ? (
                                 <View style={styles.errorBox}>
-                                    <Ionicons name="alert-circle" size={16} color="#FF5252" />
+                                    <Ionicons name="alert-circle" size={16} color="#FB7185" />
                                     <Text style={styles.errorText}>{errorMsg}</Text>
                                 </View>
                             ) : null}
 
-                            <TouchableOpacity
-                                style={[styles.primaryBtn, loading && styles.btnDisabled]}
+                            <GradientButton
+                                title={isSignUp ? 'Create Account' : 'Log In'}
                                 onPress={handleAuth}
-                                disabled={loading}
-                            >
-                                {loading ? (
-                                    <ActivityIndicator color="#141E30" />
-                                ) : (
-                                    <Text style={styles.primaryBtnText}>
-                                        {isSignUp ? 'Create Account' : 'Log In'}
-                                    </Text>
-                                )}
-                            </TouchableOpacity>
+                                loading={loading}
+                                style={styles.primaryBtn}
+                            />
 
                             <TouchableOpacity
                                 style={styles.secondaryBtn}
@@ -256,33 +251,36 @@ const styles = StyleSheet.create({
         width: '100%',
         maxWidth: 400,
         alignSelf: 'center',
-        padding: 30,
-        borderRadius: 24,
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        padding: 32,
+        borderRadius: Radius.xl,
+        backgroundColor: Colors.dark.surface,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: Colors.dark.border,
+        borderTopColor: Colors.dark.surfaceHighlight,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 20 },
+        shadowOpacity: 0.4,
+        shadowRadius: 32,
+        elevation: 10,
     },
     iconContainer: {
         alignItems: 'center',
         marginBottom: 24,
     },
     iconCircle: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        backgroundColor: 'rgba(105, 240, 174, 0.1)',
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        backgroundColor: 'rgba(94, 234, 212, 0.08)',
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: 'rgba(105, 240, 174, 0.3)',
-        shadowColor: '#69F0AE',
+        borderColor: 'rgba(94, 234, 212, 0.25)',
+        shadowColor: Colors.dark.glowTeal,
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.5,
-        shadowRadius: 20,
+        shadowRadius: 24,
+        elevation: 8,
     },
     header: {
         fontSize: 32,
@@ -308,7 +306,7 @@ const styles = StyleSheet.create({
     label: {
         fontSize: 12,
         fontFamily: 'Inter_700Bold',
-        color: '#69F0AE',
+        color: Colors.dark.accent,
         marginBottom: 8,
         marginLeft: 4,
         letterSpacing: 1,
@@ -316,33 +314,16 @@ const styles = StyleSheet.create({
     input: {
         fontSize: 16,
         fontFamily: 'Inter_600SemiBold',
-        backgroundColor: 'rgba(0, 0, 0, 0.2)',
-        borderRadius: 12,
+        backgroundColor: 'rgba(0, 0, 0, 0.25)',
+        borderRadius: Radius.md,
         paddingVertical: 14,
         paddingHorizontal: 16,
         color: '#ffffff',
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: Colors.dark.border,
     },
     primaryBtn: {
-        backgroundColor: '#69F0AE',
-        borderRadius: 30,
-        paddingVertical: 16,
-        alignItems: 'center',
         marginTop: 10,
-        shadowColor: '#69F0AE',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 5,
-    },
-    btnDisabled: {
-        opacity: 0.7,
-    },
-    primaryBtnText: {
-        color: '#141E30',
-        fontSize: 16,
-        fontFamily: 'Inter_700Bold',
     },
     secondaryBtn: {
         marginTop: 20,
@@ -366,7 +347,7 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     errorText: {
-        color: '#FF5252',
+        color: '#FB7185',
         fontFamily: 'Inter_600SemiBold',
         fontSize: 14,
         flex: 1,

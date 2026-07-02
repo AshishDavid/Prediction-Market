@@ -71,8 +71,8 @@ export default function Layout() {
 
     if (!initialized || !fontsLoaded) {
         return (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#141E30' }}>
-                <ActivityIndicator size="large" color="#69F0AE" />
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0A0E1A' }}>
+                <ActivityIndicator size="large" color="#5EEAD4" />
             </View>
         );
     }
@@ -81,14 +81,14 @@ export default function Layout() {
         <Stack
             screenOptions={{
                 headerStyle: {
-                    backgroundColor: '#141E30',
+                    backgroundColor: '#0A0E1A',
                 },
                 headerTintColor: '#fff',
                 headerTitleStyle: {
                     fontFamily: 'Inter_700Bold',
                 },
                 headerShadowVisible: false,
-                contentStyle: { backgroundColor: '#141E30' }
+                contentStyle: { backgroundColor: '#0A0E1A' }
             }}
         >
             <Stack.Screen name="index" options={{ headerShown: false }} />

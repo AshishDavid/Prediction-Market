@@ -54,7 +54,7 @@ export default function PublicProfile() {
         }
     }
 
-    if (loading) return <BackgroundLayout style={styles.center}><ActivityIndicator color="#69F0AE" /></BackgroundLayout>;
+    if (loading) return <BackgroundLayout style={styles.center}><ActivityIndicator color="#5EEAD4" /></BackgroundLayout>;
     if (!profile) return <BackgroundLayout style={styles.center}><Text style={{ color: '#fff', fontFamily: 'Inter_600SemiBold' }}>User not found</Text></BackgroundLayout>;
 
     return (
@@ -110,7 +110,7 @@ export default function PublicProfile() {
                                     ]}>
                                         <Text style={[
                                             styles.voteText,
-                                            { color: item.vote === 'YES' ? '#69F0AE' : '#FF5252' }
+                                            { color: item.vote === 'YES' ? '#5EEAD4' : '#FB7185' }
                                         ]}>
                                             {item.vote}
                                         </Text>
@@ -158,11 +158,11 @@ const styles = StyleSheet.create({
         borderRadius: 50,
         backgroundColor: 'rgba(255, 255, 255, 0.1)',
         borderWidth: 2,
-        borderColor: '#69F0AE',
+        borderColor: '#5EEAD4',
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 20,
-        shadowColor: '#69F0AE',
+        shadowColor: '#5EEAD4',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.2,
         shadowRadius: 10,
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(105, 240, 174, 0.3)',
     },
     badgeText: {
-        color: '#69F0AE',
+        color: '#5EEAD4',
         fontFamily: 'Inter_600SemiBold',
         fontSize: 14,
         letterSpacing: 0.5,

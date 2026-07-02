@@ -15,10 +15,54 @@ import MarketCard from '../../components/MarketCard';
 import { useRouter, useFocusEffect, useNavigation } from 'expo-router';
 import React, { useCallback, useState, useEffect, createElement } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { useHeaderHeight } from '@react-navigation/elements';
+import { LinearGradient } from 'expo-linear-gradient';
 import BackgroundLayout from '../../components/BackgroundLayout';
+import GradientButton from '../../components/GradientButton';
+import { Colors, Gradients, Radius } from '../../constants/theme';
+
+function Chip({ label, active, onPress, style }) {
+    if (active) {
+        return (
+            <TouchableOpacity onPress={onPress} style={style}>
+                <LinearGradient colors={Gradients.accentButton} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={chipStyles.chip}>
+                    <Text style={chipStyles.activeText}>{label}</Text>
+                </LinearGradient>
+            </TouchableOpacity>
+        );
+    }
+    return (
+        <TouchableOpacity onPress={onPress} style={[chipStyles.chip, chipStyles.inactive, style]}>
+            <Text style={chipStyles.inactiveText}>{label}</Text>
+        </TouchableOpacity>
+    );
+}
+
+const chipStyles = StyleSheet.create({
+    chip: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: Radius.pill,
+    },
+    inactive: {
+        backgroundColor: Colors.dark.surface,
+        borderWidth: 1,
+        borderColor: Colors.dark.border,
+    },
+    activeText: {
+        color: Colors.dark.onAccent,
+        fontFamily: 'Inter_600SemiBold',
+        fontSize: 14,
+    },
+    inactiveText: {
+        color: Colors.dark.textSecondary,
+        fontFamily: 'Inter_600SemiBold',
+        fontSize: 14,
+    },
+});
 
 export default function MarketList() {
-    // ... (logic remains exactly the same, omitting unchanged lines for brevity in diffs usually, but here replacing full file structure for safety)
+    const headerHeight = useHeaderHeight();
     const [markets, setMarkets] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -56,7 +100,7 @@ export default function MarketList() {
                 <TouchableOpacity onPress={() => {
                     setModalVisible(true);
                 }} style={{ marginRight: 16 }}>
-                    <Ionicons name="add-circle" size={28} color="#69F0AE" />
+                    <Ionicons name="add-circle" size={28} color="#5EEAD4" />
                 </TouchableOpacity>
             ) : null,
         });
@@ -125,9 +169,6 @@ export default function MarketList() {
                 question: newQuestion.trim(),
                 description: newSource || 'User Created',
                 close_time: closeTimeISO,
-                question: newQuestion.trim(),
-                description: newSource || 'User Created',
-                close_time: closeTimeISO,
                 category: newCategory,
                 outcome: null,
                 created_at: new Date().toISOString()
@@ -149,28 +190,18 @@ export default function MarketList() {
     if (loading && !refreshing && markets.length === 0) {
         return (
             <BackgroundLayout style={styles.center}>
-                <ActivityIndicator size="large" color="#69F0AE" />
+                <ActivityIndicator size="large" color="#5EEAD4" />
             </BackgroundLayout>
         );
     }
 
     return (
         <BackgroundLayout>
-            <View style={styles.container}>
+            <View style={[styles.container, { paddingTop: headerHeight }]}>
                 {/* Tab Switcher */}
                 <View style={styles.tabContainer}>
-                    <TouchableOpacity
-                        style={[styles.tabBtn, activeTab === 'active' && styles.activeTabBtn]}
-                        onPress={() => setActiveTab('active')}
-                    >
-                        <Text style={[styles.tabText, activeTab === 'active' && styles.activeTabText]}>Active</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.tabBtn, activeTab === 'resolved' && styles.activeTabBtn]}
-                        onPress={() => setActiveTab('resolved')}
-                    >
-                        <Text style={[styles.tabText, activeTab === 'resolved' && styles.activeTabText]}>Resolved</Text>
-                    </TouchableOpacity>
+                    <Chip label="Active" active={activeTab === 'active'} onPress={() => setActiveTab('active')} />
+                    <Chip label="Resolved" active={activeTab === 'resolved'} onPress={() => setActiveTab('resolved')} />
                 </View>
 
                 {/* Category Filter */}
@@ -183,26 +214,12 @@ export default function MarketList() {
                             contentContainerStyle={{ paddingHorizontal: 16 }}
                             keyExtractor={item => item}
                             renderItem={({ item }) => (
-                                <TouchableOpacity
+                                <Chip
+                                    label={item}
+                                    active={selectedCategory === item}
                                     onPress={() => setSelectedCategory(item)}
-                                    style={{
-                                        paddingHorizontal: 16,
-                                        paddingVertical: 8,
-                                        borderRadius: 20,
-                                        marginRight: 8,
-                                        backgroundColor: selectedCategory === item ? '#69F0AE' : 'rgba(255,255,255,0.1)',
-                                        borderWidth: 1,
-                                        borderColor: selectedCategory === item ? '#69F0AE' : 'rgba(255,255,255,0.1)',
-                                    }}
-                                >
-                                    <Text style={{
-                                        color: selectedCategory === item ? '#141E30' : 'rgba(255,255,255,0.6)',
-                                        fontFamily: 'Inter_600SemiBold',
-                                        fontSize: 14,
-                                    }}>
-                                        {item}
-                                    </Text>
-                                </TouchableOpacity>
+                                    style={{ marginRight: 8 }}
+                                />
                             )}
                         />
                     </View>
@@ -241,7 +258,7 @@ export default function MarketList() {
                             <View style={styles.modalHeader}>
                                 <Text style={styles.modalTitle}>New Market</Text>
                                 <TouchableOpacity onPress={() => setModalVisible(false)}>
-                                    <Ionicons name="close" size={24} color="#666" />
+                                    <Ionicons name="close" size={24} color="rgba(255,255,255,0.6)" />
                                 </TouchableOpacity>
                             </View>
 
@@ -249,7 +266,7 @@ export default function MarketList() {
                             <TextInput
                                 style={styles.input}
                                 placeholder="e.g. Will it rain tomorrow?"
-                                placeholderTextColor="#999"
+                                placeholderTextColor="rgba(255,255,255,0.4)"
                                 value={newQuestion}
                                 onChangeText={setNewQuestion}
                                 multiline
@@ -259,7 +276,7 @@ export default function MarketList() {
                             <TextInput
                                 style={styles.input}
                                 placeholder="e.g. Weather.com"
-                                placeholderTextColor="#999"
+                                placeholderTextColor="rgba(255,255,255,0.4)"
                                 value={newSource}
                                 onChangeText={setNewSource}
                             />
@@ -274,13 +291,13 @@ export default function MarketList() {
                                             paddingHorizontal: 12,
                                             paddingVertical: 6,
                                             borderRadius: 16,
-                                            backgroundColor: newCategory === cat ? '#69F0AE' : 'rgba(255,255,255,0.1)',
+                                            backgroundColor: newCategory === cat ? '#5EEAD4' : 'rgba(255,255,255,0.1)',
                                             borderWidth: 1,
-                                            borderColor: newCategory === cat ? '#69F0AE' : 'rgba(255,255,255,0.1)',
+                                            borderColor: newCategory === cat ? '#5EEAD4' : 'rgba(255,255,255,0.1)',
                                         }}
                                     >
                                         <Text style={{
-                                            color: newCategory === cat ? '#141E30' : 'rgba(255,255,255,0.6)',
+                                            color: newCategory === cat ? '#08201C' : 'rgba(255,255,255,0.6)',
                                             fontSize: 12,
                                             fontFamily: 'Inter_600SemiBold',
                                         }}>{cat}</Text>
@@ -303,7 +320,16 @@ export default function MarketList() {
                                                     const dObj = new Date(closeDate); dObj.setFullYear(y, m - 1, d); setCloseDate(dObj);
                                                 }
                                             },
-                                            style: { width: '100%', padding: 10, borderRadius: 8, backgroundColor: '#f0f0f0', border: 'none' }
+                                            style: {
+                                                width: '100%',
+                                                padding: 12,
+                                                borderRadius: 12,
+                                                backgroundColor: 'rgba(255,255,255,0.1)',
+                                                border: '1px solid rgba(255,255,255,0.1)',
+                                                color: '#fff',
+                                                fontSize: 14,
+                                                colorScheme: 'dark',
+                                            }
                                         })}
                                     </View>
                                     <View style={{ flex: 1 }}>
@@ -316,17 +342,26 @@ export default function MarketList() {
                                                     const dObj = new Date(closeDate); dObj.setHours(h, min); setCloseDate(dObj);
                                                 }
                                             },
-                                            style: { width: '100%', padding: 10, borderRadius: 8, backgroundColor: '#f0f0f0', border: 'none' }
+                                            style: {
+                                                width: '100%',
+                                                padding: 12,
+                                                borderRadius: 12,
+                                                backgroundColor: 'rgba(255,255,255,0.1)',
+                                                border: '1px solid rgba(255,255,255,0.1)',
+                                                color: '#fff',
+                                                fontSize: 14,
+                                                colorScheme: 'dark',
+                                            }
                                         })}
                                     </View>
                                 </View>
                             ) : (
                                 <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
                                     <TouchableOpacity onPress={() => { setMode('date'); setShowDatePicker(true); }} style={styles.dateBtn}>
-                                        <Text>{closeDate.toLocaleDateString()}</Text>
+                                        <Text style={styles.dateBtnText}>{closeDate.toLocaleDateString()}</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity onPress={() => { setMode('time'); setShowDatePicker(true); }} style={styles.dateBtn}>
-                                        <Text>{closeDate.toLocaleTimeString()}</Text>
+                                        <Text style={styles.dateBtnText}>{closeDate.toLocaleTimeString()}</Text>
                                     </TouchableOpacity>
                                     {showDatePicker && (
                                         <DateTimePicker
@@ -340,13 +375,12 @@ export default function MarketList() {
                                 </View>
                             )}
 
-                            <TouchableOpacity
-                                style={[styles.createBtn, creating && styles.disabledBtn]}
+                            <GradientButton
+                                title={creating ? 'Creating...' : 'Create Market'}
                                 onPress={handleCreateMarket}
-                                disabled={creating}
-                            >
-                                <Text style={styles.createBtnText}>{creating ? 'Creating...' : 'Create Market'}</Text>
-                            </TouchableOpacity>
+                                loading={creating}
+                                style={styles.createBtn}
+                            />
                         </View>
                     </KeyboardAvoidingView>
                 </Modal>
@@ -385,32 +419,13 @@ const styles = StyleSheet.create({
         gap: 12,
         marginBottom: 8,
     },
-    tabBtn: {
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
-    },
-    activeTabBtn: {
-        backgroundColor: '#69F0AE',
-        borderColor: '#69F0AE',
-    },
-    tabText: {
-        fontFamily: 'Inter_600SemiBold',
-        color: 'rgba(255,255,255,0.6)',
-    },
-    activeTabText: {
-        color: '#141E30',
-    },
     list: {
         padding: 16,
     },
     emptyText: {
         textAlign: 'center',
         marginTop: 50,
-        color: 'rgba(255,255,255,0.4)',
+        color: Colors.dark.textTertiary,
         fontSize: 16,
         fontFamily: 'Inter_400Regular',
     },
@@ -421,13 +436,15 @@ const styles = StyleSheet.create({
         alignItems: Platform.OS === 'web' ? 'center' : 'stretch',
     },
     modalContent: {
-        backgroundColor: '#1E2A38', // Dark Modal
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        borderRadius: Platform.OS === 'web' ? 20 : 0,
+        backgroundColor: Colors.dark.modal,
+        borderTopLeftRadius: Radius.xl,
+        borderTopRightRadius: Radius.xl,
+        borderRadius: Platform.OS === 'web' ? Radius.xl : 0,
         padding: 24,
         width: Platform.OS === 'web' ? '90%' : '100%',
         maxWidth: Platform.OS === 'web' ? 500 : '100%',
+        borderWidth: 1,
+        borderColor: Colors.dark.border,
     },
     modalHeader: {
         flexDirection: 'row',
@@ -444,37 +461,34 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontFamily: 'Inter_600SemiBold',
         marginBottom: 8,
-        color: 'rgba(255,255,255,0.8)',
+        color: Colors.dark.textSecondary,
     },
     input: {
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: 'rgba(0,0,0,0.25)',
         padding: 12,
-        borderRadius: 12,
+        borderRadius: Radius.md,
         fontSize: 16,
         marginBottom: 20,
         color: '#fff',
         fontFamily: 'Inter_400Regular',
+        borderWidth: 1,
+        borderColor: Colors.dark.border,
     },
     createBtn: {
-        backgroundColor: '#69F0AE',
-        padding: 16,
-        borderRadius: 12,
-        alignItems: 'center',
         marginTop: 10,
-    },
-    disabledBtn: {
-        opacity: 0.7,
-    },
-    createBtnText: {
-        color: '#141E30',
-        fontSize: 16,
-        fontFamily: 'Inter_700Bold',
     },
     dateBtn: {
         flex: 1,
-        backgroundColor: '#f0f0f0',
+        backgroundColor: Colors.dark.surface,
         padding: 12,
-        borderRadius: 8,
-        alignItems: 'center'
+        borderRadius: Radius.md,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: Colors.dark.border,
+    },
+    dateBtnText: {
+        color: '#fff',
+        fontFamily: 'Inter_600SemiBold',
+        fontSize: 14,
     }
 });

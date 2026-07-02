@@ -6,6 +6,8 @@ import { doc, getDoc, collection, addDoc, serverTimestamp, query, where, getDocs
 import { db, auth } from '../../lib/firebase';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import BackgroundLayout from '../../components/BackgroundLayout';
+import GradientButton from '../../components/GradientButton';
+import { Colors, Radius } from '../../constants/theme';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -90,7 +92,7 @@ const MarketChart = ({ marketId, currentProb }) => {
     `;
 
     const isBullish = currentProb >= 50;
-    const chartColor = isBullish ? '#69F0AE' : '#FF5252';
+    const chartColor = isBullish ? '#5EEAD4' : '#FB7185';
 
     return (
         <View style={styles.chartContainer}>
@@ -136,6 +138,10 @@ export default function MarketDetail() {
     const [targetOutcome, setTargetOutcome] = useState(null); // true (YES) or false (NO)
     const [userVote, setUserVote] = useState(null);
     const [_, setForceUpdate] = useState(0);
+
+    // Danger Zone (reset / delete) confirmation modal state
+    const [dangerAction, setDangerAction] = useState(null); // null | 'reset' | 'delete'
+    const [dangerProcessing, setDangerProcessing] = useState(false);
 
     useLayoutEffect(() => {
         navigation.setOptions({
@@ -400,92 +406,41 @@ export default function MarketDetail() {
         }
     };
 
-    async function handleResetMarket() {
-        if (!isAdmin) return;
+    async function performDangerAction() {
+        if (!isAdmin || !dangerAction) return;
+        setDangerProcessing(true);
+        try {
+            // Both reset and delete first clear out this market's predictions.
+            const q = query(collection(db, 'predictions'), where('market_id', '==', id));
+            const snapshot = await getDocs(q);
+            const batch = writeBatch(db);
+            snapshot.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
 
-        Alert.alert(
-            "Reset Market",
-            "This will clear all votes, reset probability to 50%, and remove the outcome. This cannot be undone.",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Reset",
-                    style: "destructive",
-                    onPress: async () => {
-                        setLoading(true);
-                        try {
-                            // 1. Reset Market Stats
-                            await updateDoc(doc(db, 'markets', id), {
-                                yes_votes: 0,
-                                no_votes: 0,
-                                vote_count: 0,
-                                probability: 50,
-                                outcome: null,
-                                updated_at: new Date().toISOString()
-                            });
+            if (dangerAction === 'reset') {
+                await updateDoc(doc(db, 'markets', id), {
+                    yes_votes: 0,
+                    no_votes: 0,
+                    vote_count: 0,
+                    probability: 50,
+                    outcome: null,
+                    updated_at: new Date().toISOString()
+                });
+            } else {
+                await deleteDoc(doc(db, 'markets', id));
+            }
 
-                            // 2. Delete Predictions
-                            const q = query(collection(db, 'predictions'), where('market_id', '==', id));
-                            const snapshot = await getDocs(q);
-                            const batch = writeBatch(db);
-                            snapshot.forEach(doc => {
-                                batch.delete(doc.ref);
-                            });
-                            await batch.commit();
-
-                            Alert.alert("Success", "Market has been reset.");
-                            router.replace('/(tabs)');
-                        } catch (e) {
-                            console.error("Reset failed:", e);
-                            Alert.alert("Error", e.message);
-                            setLoading(false);
-                        }
-                    }
-                }
-            ]
-        );
+            setDangerAction(null);
+            router.replace('/(tabs)');
+        } catch (e) {
+            console.error(`${dangerAction === 'reset' ? 'Reset' : 'Delete'} failed:`, e);
+            setDangerProcessing(false);
+        }
     }
 
-    async function handleDeleteMarket() {
-        if (!isAdmin) return;
-
-        Alert.alert(
-            "Delete Market",
-            "Are you surely you want to PERMANENTLY DELETE this market?",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: async () => {
-                        setLoading(true);
-                        try {
-                            // 1. Delete Predictions
-                            const q = query(collection(db, 'predictions'), where('market_id', '==', id));
-                            const snapshot = await getDocs(q);
-                            const batch = writeBatch(db);
-                            snapshot.forEach(doc => {
-                                batch.delete(doc.ref);
-                            });
-                            await batch.commit();
-
-                            // 2. Delete Market
-                            await deleteDoc(doc(db, 'markets', id));
-
-                            Alert.alert("Deleted", "Market gone.");
-                            router.replace('/(tabs)');
-                        } catch (e) {
-                            console.error("Delete failed:", e);
-                            Alert.alert("Error", e.message);
-                            setLoading(false);
-                        }
-                    }
-                }
-            ]
-        );
-    }
-
-    if (loading) return <BackgroundLayout style={styles.center}><ActivityIndicator color="#69F0AE" /></BackgroundLayout>;
+    if (loading) return <BackgroundLayout style={styles.center}><ActivityIndicator color="#5EEAD4" /></BackgroundLayout>;
     if (!market) return <BackgroundLayout style={styles.center}><Text style={{ color: '#fff', fontFamily: 'Inter_600SemiBold' }}>Market not found</Text></BackgroundLayout>;
 
     const isClosed = new Date(market.close_time) < new Date();
@@ -501,11 +456,10 @@ export default function MarketDetail() {
     // Trend
     const trend = prob - 50;
     const trendLabel = trend > 0 ? `+${trend.toFixed(1)}%` : `${trend.toFixed(1)}%`;
-    const trendColor = trend > 0 ? '#69F0AE' : (trend < 0 ? '#FF5252' : 'rgba(255,255,255,0.6)');
+    const trendColor = trend > 0 ? '#5EEAD4' : (trend < 0 ? '#FB7185' : 'rgba(255,255,255,0.6)');
 
     return (
         <BackgroundLayout>
-            {/* Custom Header */}
             {/* Custom Header */}
             <View style={styles.customHeader}>
                 <TouchableOpacity
@@ -544,11 +498,11 @@ export default function MarketDetail() {
                     <View style={styles.statsGrid}>
                         <View style={styles.statItem}>
                             <Text style={styles.statLabel}>YES</Text>
-                            <Text style={[styles.statValue, { color: '#69F0AE' }]}>{yesPercent}%</Text>
+                            <Text style={[styles.statValue, { color: '#5EEAD4' }]}>{yesPercent}%</Text>
                         </View>
                         <View style={styles.statItem}>
                             <Text style={styles.statLabel}>NO</Text>
-                            <Text style={[styles.statValue, { color: '#FF5252' }]}>{noPercent}%</Text>
+                            <Text style={[styles.statValue, { color: '#FB7185' }]}>{noPercent}%</Text>
                         </View>
                         <View style={styles.statItem}>
                             <Text style={styles.statLabel}>CONFIDENCE</Text>
@@ -574,28 +528,28 @@ export default function MarketDetail() {
                                 style={[
                                     styles.outcomeCard,
                                     {
-                                        borderColor: userVote === 'YES' ? '#69F0AE' : 'rgba(105, 240, 174, 0.5)',
+                                        borderColor: userVote === 'YES' ? '#5EEAD4' : 'rgba(105, 240, 174, 0.5)',
                                         borderWidth: userVote === 'YES' ? 2 : 1,
                                         backgroundColor: userVote === 'YES' ? 'rgba(105, 240, 174, 0.1)' : 'transparent'
                                     }
                                 ]}
                                 onPress={() => handleVote('YES')}
                             >
-                                <Text style={[styles.outcomeTitle, { color: '#69F0AE' }]}>{userVote === 'YES' ? 'VOTED YES' : 'Vote YES'}</Text>
+                                <Text style={[styles.outcomeTitle, { color: '#5EEAD4' }]}>{userVote === 'YES' ? 'VOTED YES' : 'Vote YES'}</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
                                 style={[
                                     styles.outcomeCard,
                                     {
-                                        borderColor: userVote === 'NO' ? '#FF5252' : 'rgba(255, 82, 82, 0.5)',
+                                        borderColor: userVote === 'NO' ? '#FB7185' : 'rgba(255, 82, 82, 0.5)',
                                         borderWidth: userVote === 'NO' ? 2 : 1,
                                         backgroundColor: userVote === 'NO' ? 'rgba(255, 82, 82, 0.1)' : 'transparent'
                                     }
                                 ]}
                                 onPress={() => handleVote('NO')}
                             >
-                                <Text style={[styles.outcomeTitle, { color: '#FF5252' }]}>{userVote === 'NO' ? 'VOTED NO' : 'Vote NO'}</Text>
+                                <Text style={[styles.outcomeTitle, { color: '#FB7185' }]}>{userVote === 'NO' ? 'VOTED NO' : 'Vote NO'}</Text>
                             </TouchableOpacity>
                         </View>
                     )}
@@ -609,13 +563,13 @@ export default function MarketDetail() {
                                     style={[styles.adminBtn, { backgroundColor: 'rgba(105, 240, 174, 0.2)' }]}
                                     onPress={() => initiateResolve(true)}
                                 >
-                                    <Text style={{ color: '#69F0AE', fontFamily: 'Inter_700Bold' }}>Resolve YES</Text>
+                                    <Text style={{ color: '#5EEAD4', fontFamily: 'Inter_700Bold' }}>Resolve YES</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     style={[styles.adminBtn, { backgroundColor: 'rgba(255, 82, 82, 0.2)' }]}
                                     onPress={() => initiateResolve(false)}
                                 >
-                                    <Text style={{ color: '#FF5252', fontFamily: 'Inter_700Bold' }}>Resolve NO</Text>
+                                    <Text style={{ color: '#FB7185', fontFamily: 'Inter_700Bold' }}>Resolve NO</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -626,6 +580,27 @@ export default function MarketDetail() {
                             <Text style={styles.resolutionText}>
                                 Market Resolved: {market.outcome ? 'YES' : 'NO'}
                             </Text>
+                        </View>
+                    )}
+
+                    {/* Admin Danger Zone */}
+                    {isAdmin && (
+                        <View style={styles.dangerPanel}>
+                            <Text style={styles.dangerTitle}>Danger Zone</Text>
+                            <View style={styles.adminButtons}>
+                                <TouchableOpacity
+                                    style={[styles.adminBtn, { backgroundColor: 'rgba(251, 191, 36, 0.15)', borderWidth: 1, borderColor: 'rgba(251, 191, 36, 0.4)' }]}
+                                    onPress={() => setDangerAction('reset')}
+                                >
+                                    <Text style={{ color: '#FBBF24', fontFamily: 'Inter_700Bold' }}>Reset Market</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.adminBtn, { backgroundColor: 'rgba(251, 113, 133, 0.15)', borderWidth: 1, borderColor: 'rgba(251, 113, 133, 0.4)' }]}
+                                    onPress={() => setDangerAction('delete')}
+                                >
+                                    <Text style={{ color: '#FB7185', fontFamily: 'Inter_700Bold' }}>Delete Market</Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     )}
                 </View>
@@ -642,7 +617,7 @@ export default function MarketDetail() {
                             <Text style={styles.modalTitle}>Confirm Resolution</Text>
                             <Text style={styles.modalText}>
                                 Are you sure you want to resolve this market as
-                                <Text style={{ fontWeight: '700', color: targetOutcome ? '#69F0AE' : '#FF5252' }}>
+                                <Text style={{ fontWeight: '700', color: targetOutcome ? '#5EEAD4' : '#FB7185' }}>
                                     {targetOutcome ? ' YES' : ' NO'}
                                 </Text>?
                             </Text>
@@ -656,13 +631,54 @@ export default function MarketDetail() {
                                     <Text style={styles.btnText}>Cancel</Text>
                                 </TouchableOpacity>
 
-                                <TouchableOpacity
-                                    style={[styles.modalBtn, styles.confirmBtn]}
+                                <GradientButton
+                                    title="Confirm"
                                     onPress={performResolution}
-                                    disabled={resolving}
+                                    loading={resolving}
+                                    style={{ flex: 1 }}
+                                    textStyle={{ fontSize: 16, fontFamily: 'Inter_600SemiBold' }}
+                                />
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
+
+                {/* Confirm Reset/Delete Modal */}
+                <Modal
+                    visible={dangerAction !== null}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={() => setDangerAction(null)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
+                            <Text style={styles.modalTitle}>
+                                {dangerAction === 'reset' ? 'Reset Market' : 'Delete Market'}
+                            </Text>
+                            <Text style={styles.modalText}>
+                                {dangerAction === 'reset'
+                                    ? 'This will clear all votes, reset probability to 50%, and remove the outcome.'
+                                    : 'This will permanently delete this market and all of its votes.'}
+                            </Text>
+                            <Text style={styles.modalSubtext}>This action cannot be undone.</Text>
+
+                            <View style={styles.modalActions}>
+                                <TouchableOpacity
+                                    style={[styles.modalBtn, styles.cancelBtn]}
+                                    onPress={() => setDangerAction(null)}
+                                    disabled={dangerProcessing}
                                 >
-                                    {resolving ? <ActivityIndicator color="#141E30" /> : <Text style={[styles.btnText, { color: '#141E30' }]}>Confirm</Text>}
+                                    <Text style={styles.btnText}>Cancel</Text>
                                 </TouchableOpacity>
+
+                                <GradientButton
+                                    title={dangerAction === 'reset' ? 'Reset' : 'Delete'}
+                                    variant="danger"
+                                    onPress={performDangerAction}
+                                    loading={dangerProcessing}
+                                    style={{ flex: 1 }}
+                                    textStyle={{ fontSize: 16, fontFamily: 'Inter_600SemiBold' }}
+                                />
                             </View>
                         </View>
                     </View>
@@ -750,19 +766,20 @@ const styles = StyleSheet.create({
     statsGrid: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        borderRadius: 16,
+        backgroundColor: Colors.dark.surface,
+        borderRadius: Radius.lg,
         padding: 20,
         marginBottom: 30,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        borderColor: Colors.dark.border,
+        borderTopColor: Colors.dark.surfaceHighlight,
     },
     statItem: {
         alignItems: 'center',
     },
     statLabel: {
         fontSize: 10,
-        color: 'rgba(255,255,255,0.5)',
+        color: Colors.dark.textSecondary,
         fontFamily: 'Inter_700Bold',
         marginBottom: 4,
     },
@@ -778,9 +795,9 @@ const styles = StyleSheet.create({
     },
     outcomeCard: {
         flex: 1,
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: Colors.dark.surface,
         padding: 20,
-        borderRadius: 16,
+        borderRadius: Radius.lg,
         borderWidth: 1,
         alignItems: 'center',
     },
@@ -791,17 +808,17 @@ const styles = StyleSheet.create({
     },
     outcomeSubtitle: {
         fontSize: 12,
-        color: 'rgba(255,255,255,0.5)',
+        color: Colors.dark.textSecondary,
         fontFamily: 'Inter_400Regular',
         textAlign: 'center',
     },
     adminPanel: {
         marginTop: 40,
         padding: 20,
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        borderRadius: 16,
+        backgroundColor: Colors.dark.surface,
+        borderRadius: Radius.lg,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        borderColor: Colors.dark.border,
     },
     adminTitle: {
         fontSize: 16,
@@ -818,6 +835,20 @@ const styles = StyleSheet.create({
         padding: 12,
         borderRadius: 8,
         alignItems: 'center',
+    },
+    dangerPanel: {
+        marginTop: 20,
+        padding: 20,
+        backgroundColor: Colors.dark.surface,
+        borderRadius: Radius.lg,
+        borderWidth: 1,
+        borderColor: 'rgba(251, 113, 133, 0.25)',
+    },
+    dangerTitle: {
+        fontSize: 16,
+        fontFamily: 'Inter_700Bold',
+        color: Colors.dark.danger,
+        marginBottom: 16,
     },
     resolutionBanner: {
         marginTop: 30,
@@ -842,7 +873,7 @@ const styles = StyleSheet.create({
     },
     modalContent: {
         width: '80%',
-        backgroundColor: '#1E2A38',
+        backgroundColor: '#161F32',
         borderRadius: 20,
         padding: 24,
         borderWidth: 1,
@@ -881,9 +912,6 @@ const styles = StyleSheet.create({
     },
     cancelBtn: {
         backgroundColor: 'rgba(255,255,255,0.1)',
-    },
-    confirmBtn: {
-        backgroundColor: '#69F0AE',
     },
     btnText: {
         fontFamily: 'Inter_600SemiBold',
