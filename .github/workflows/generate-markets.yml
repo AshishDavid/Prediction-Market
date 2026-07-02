@@ -1,0 +1,20 @@
+name: Generate Trending Markets
+
+on:
+  schedule:
+    - cron: '0 12 * * *' # daily at 12:00 UTC
+  workflow_dispatch: {} # allows manual runs from the Actions tab, for testing
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: node scripts/generate_trending_markets.js
+        env:
+          PULSE_ADMIN_EMAIL: ${{ secrets.PULSE_ADMIN_EMAIL }}
+          PULSE_ADMIN_PASSWORD: ${{ secrets.PULSE_ADMIN_PASSWORD }}

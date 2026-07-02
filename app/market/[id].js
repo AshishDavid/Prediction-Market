@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useLayoutEffect, useCallback } from 'react';
+import React, { useEffect, useState, useLayoutEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, RefreshControl, Dimensions, Alert, Modal } from 'react-native';
 import { useLocalSearchParams, useNavigation, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, getDoc, collection, addDoc, serverTimestamp, query, where, getDocs, updateDoc, runTransaction, setDoc, onSnapshot, writeBatch, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, serverTimestamp, query, where, orderBy, getDocs, updateDoc, runTransaction, setDoc, onSnapshot, writeBatch, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../../lib/firebase';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import BackgroundLayout from '../../components/BackgroundLayout';
@@ -11,45 +11,88 @@ import { Colors, Radius } from '../../constants/theme';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
-const MarketChart = ({ marketId, currentProb }) => {
-    const [dataPoints, setDataPoints] = useState([]);
+// Shared helpers for multi-choice markets — derive vote-share percents from the
+// raw `votes` map on read, rather than storing a derived scalar (there's no single
+// "probability" for N options the way there is for binary).
+function computeOptionStats(market) {
+    if (!market || market.type !== 'multi' || !Array.isArray(market.options) || market.options.length === 0) return [];
+    const votes = market.votes || {};
+    const total = market.options.reduce((sum, o) => sum + (votes[o.id] || 0), 0);
+    return market.options.map(o => {
+        const count = votes[o.id] || 0;
+        const percent = total > 0 ? Math.round((count / total) * 100) : Math.round(100 / market.options.length);
+        return { id: o.id, label: o.label, votes: count, percent };
+    });
+}
+
+function getLeadingOption(market) {
+    const stats = computeOptionStats(market);
+    if (stats.length === 0) return null;
+    return stats.reduce((best, cur) => (cur.votes > best.votes ? cur : best), stats[0]);
+}
+
+const MarketChart = ({ marketId, market, currentProb }) => {
+    const [historyPoints, setHistoryPoints] = useState([]);
+    const [loadingHistory, setLoadingHistory] = useState(true);
 
     useEffect(() => {
-        // Simulated data generation with more points for smoothness
-        const generateChartData = () => {
-            const points = [];
-            const now = new Date();
-            const hoursBack = 24;
-            const pointsCount = 40; // More points for smoother curve
+        const historyRef = collection(db, 'markets', marketId, 'history');
+        const q = query(historyRef, orderBy('timestamp', 'asc'));
+        const unsub = onSnapshot(q, (snap) => {
+            setHistoryPoints(snap.docs.map(d => d.data()));
+            setLoadingHistory(false);
+        }, (err) => {
+            console.error('[MarketChart] history query failed:', err);
+            setLoadingHistory(false);
+        });
+        return () => unsub();
+    }, [marketId]);
 
-            let price = 50;
+    const isMulti = market?.type === 'multi';
+    const leading = isMulti ? getLeadingOption(market) : null;
 
-            for (let i = 0; i <= pointsCount; i++) {
-                const time = new Date(now.getTime() - (hoursBack - (i / pointsCount) * hoursBack) * 3600 * 1000);
-
-                if (i === pointsCount) {
-                    price = currentProb;
-                } else {
-                    const volatility = 5; // Reduced volatility for smoother look
-                    const change = (Math.random() - 0.5) * volatility;
-                    price += change;
-                    price = Math.max(10, Math.min(90, price));
-                }
-                points.push({ time, price });
+    // Real trend line: for multi, track only the currently-leading option's
+    // percent over time (overlaying 2-4 series in a compact sparkline is a
+    // legibility problem, not a data problem — v1 scope is one line).
+    const rawPoints = useMemo(() => {
+        return historyPoints.map(h => {
+            const time = h.timestamp?.toDate ? h.timestamp.toDate() : new Date();
+            if (isMulti) {
+                const votes = h.votes || {};
+                const total = Object.values(votes).reduce((a, b) => a + b, 0);
+                const price = total > 0 && leading
+                    ? (votes[leading.id] || 0) / total * 100
+                    : (100 / (market?.options?.length || 2));
+                return { time, price };
             }
-            setDataPoints(points);
-        };
+            return { time, price: h.probability };
+        });
+    }, [historyPoints, isMulti, leading?.id, market?.options?.length]);
 
-        generateChartData();
-    }, [marketId, currentProb]);
-
-    if (dataPoints.length === 0) return null;
+    if (loadingHistory) return null;
 
     const width = SCREEN_WIDTH - 40;
-    const height = 180; // Taller chart
+    const height = 180;
     const padding = 10;
     const maxPrice = 100;
     const minPrice = 0;
+
+    // 0 history points: nothing to draw yet.
+    if (rawPoints.length === 0) {
+        return (
+            <View style={styles.chartContainer}>
+                <View style={{ width, height, justifyContent: 'center', alignItems: 'center' }}>
+                    <View style={{ width: '100%', height: 1, backgroundColor: 'rgba(255,255,255,0.15)' }} />
+                    <Text style={styles.chartEmptyText}>No votes yet</Text>
+                </View>
+            </View>
+        );
+    }
+
+    // 1 history point: duplicate it so the existing curve math (which divides
+    // by dataPoints.length - 1) degenerates into a flat horizontal line instead
+    // of dividing by zero.
+    const dataPoints = rawPoints.length === 1 ? [rawPoints[0], rawPoints[0]] : rawPoints;
 
     const xScale = (index) => (index / (dataPoints.length - 1)) * (width - 2 * padding) + padding;
     const yScale = (price) => height - padding - ((price - minPrice) / (maxPrice - minPrice)) * (height - 2 * padding);
@@ -91,11 +134,15 @@ const MarketChart = ({ marketId, currentProb }) => {
         Z
     `;
 
-    const isBullish = currentProb >= 50;
-    const chartColor = isBullish ? '#5EEAD4' : '#FB7185';
+    const currentValue = isMulti ? (leading?.percent ?? 0) : currentProb;
+    const isBullish = currentValue >= 50;
+    const chartColor = isMulti ? Colors.dark.accent : (isBullish ? '#5EEAD4' : '#FB7185');
 
     return (
         <View style={styles.chartContainer}>
+            {isMulti && leading && (
+                <Text style={styles.chartLegend}>Tracking: {leading.label}</Text>
+            )}
             <Svg width={width} height={height}>
                 <Defs>
                     <LinearGradient id="gradient" x1="0" y1="0" x2="0" y2="1">
@@ -135,7 +182,7 @@ export default function MarketDetail() {
 
     // Resolution Modal State
     const [resolveModalVisible, setResolveModalVisible] = useState(false);
-    const [targetOutcome, setTargetOutcome] = useState(null); // true (YES) or false (NO)
+    const [targetOutcome, setTargetOutcome] = useState(null); // true/false (binary) or option id string (multi)
     const [userVote, setUserVote] = useState(null);
     const [_, setForceUpdate] = useState(0);
 
@@ -260,6 +307,7 @@ export default function MarketDetail() {
                 const marketRef = doc(db, 'markets', id);
                 // Use deterministic ID for transaction safety
                 const predRef = doc(db, 'predictions', `${user.uid}_${id}`);
+                const historyRef = doc(collection(db, 'markets', id, 'history'));
 
                 const marketDoc = await transaction.get(marketRef);
                 if (!marketDoc.exists()) {
@@ -321,6 +369,7 @@ export default function MarketDetail() {
                     vote_count: newTotal,
                     probability: newProb
                 });
+                transaction.set(historyRef, { timestamp: serverTimestamp(), probability: newProb });
             });
 
             // Refresh UI not strictly necessary with onSnapshot, but safe to do
@@ -337,21 +386,98 @@ export default function MarketDetail() {
         }
     };
 
+    const handleVoteMulti = async (optionId) => {
+        try {
+            const user = auth.currentUser;
+            if (!user) {
+                router.push('/login');
+                return;
+            }
+
+            if (new Date(market.close_time) < new Date()) {
+                Alert.alert('Market Closed', 'Voting has ended for this market.');
+                return;
+            }
+
+            await runTransaction(db, async (transaction) => {
+                const marketRef = doc(db, 'markets', id);
+                const predRef = doc(db, 'predictions', `${user.uid}_${id}`);
+                const historyRef = doc(collection(db, 'markets', id, 'history'));
+
+                const marketDoc = await transaction.get(marketRef);
+                if (!marketDoc.exists()) {
+                    throw new Error("Market does not exist!");
+                }
+
+                const predDoc = await transaction.get(predRef);
+                const mData = marketDoc.data();
+
+                const votes = { ...(mData.votes || {}) };
+                (mData.options || []).forEach(opt => {
+                    if (!(opt.id in votes)) votes[opt.id] = 0;
+                });
+
+                if (predDoc.exists()) {
+                    const currentVote = predDoc.data().vote;
+                    if (currentVote === optionId) {
+                        throw new Error(`ALREADY_VOTED:${optionId}`);
+                    }
+                    if (currentVote in votes) votes[currentVote] = Math.max(0, votes[currentVote] - 1);
+                    votes[optionId] = (votes[optionId] || 0) + 1;
+
+                    transaction.update(predRef, {
+                        vote: optionId,
+                        updated_at: new Date().toISOString()
+                    });
+                } else {
+                    votes[optionId] = (votes[optionId] || 0) + 1;
+
+                    transaction.set(predRef, {
+                        market_id: id,
+                        user_id: user.uid,
+                        vote: optionId,
+                        created_at: serverTimestamp(),
+                        updated_at: new Date().toISOString()
+                    });
+                }
+
+                const newTotal = Object.values(votes).reduce((a, b) => a + b, 0);
+
+                transaction.update(marketRef, {
+                    votes,
+                    vote_count: newTotal
+                });
+                transaction.set(historyRef, { timestamp: serverTimestamp(), votes });
+            });
+
+            Alert.alert('Vote Submitted', 'Your vote has been recorded.');
+        } catch (e) {
+            console.error('Error voting:', e);
+            if (e.message && e.message.includes('ALREADY_VOTED')) {
+                Alert.alert('Already Voted', 'You already voted for this option on this market.');
+            } else {
+                Alert.alert('Error', 'Could not submit vote. Please try again.');
+            }
+        }
+    };
+
     // New Function to open Modal
     const initiateResolve = (outcome) => {
         setTargetOutcome(outcome);
         setResolveModalVisible(true);
     };
 
-    // Actual Resolution Logic moved here
+    // Actual Resolution Logic moved here — generalized for binary (targetOutcome is
+    // boolean) and multi-choice (targetOutcome is the winning option's id string).
     const performResolution = async () => {
         setResolving(true);
         try {
             const marketRef = doc(db, 'markets', id);
+            const isMulti = market.type === 'multi';
 
             // 1. Update Market Outcome
             await updateDoc(marketRef, {
-                outcome: targetOutcome, // true = YES, false = NO
+                outcome: targetOutcome, // boolean (binary) or option id (multi)
                 resolved_at: serverTimestamp()
             });
 
@@ -365,7 +491,9 @@ export default function MarketDetail() {
 
             for (const pDoc of querySnapshot.docs) {
                 const pData = pDoc.data();
-                const isWinner = (targetOutcome && pData.vote === 'YES') || (!targetOutcome && pData.vote === 'NO');
+                const isWinner = isMulti
+                    ? pData.vote === targetOutcome
+                    : ((targetOutcome && pData.vote === 'YES') || (!targetOutcome && pData.vote === 'NO'));
 
                 // Time Decay Calculation
                 let points = 10;
@@ -410,24 +538,34 @@ export default function MarketDetail() {
         if (!isAdmin || !dangerAction) return;
         setDangerProcessing(true);
         try {
-            // Both reset and delete first clear out this market's predictions.
-            const q = query(collection(db, 'predictions'), where('market_id', '==', id));
-            const snapshot = await getDocs(q);
+            // Both reset and delete first clear out this market's predictions and history.
+            const predsQ = query(collection(db, 'predictions'), where('market_id', '==', id));
+            const predsSnapshot = await getDocs(predsQ);
+            const historySnapshot = await getDocs(collection(db, 'markets', id, 'history'));
+
             const batch = writeBatch(db);
-            snapshot.forEach(doc => {
-                batch.delete(doc.ref);
-            });
+            predsSnapshot.forEach(doc => batch.delete(doc.ref));
+            historySnapshot.forEach(doc => batch.delete(doc.ref));
             await batch.commit();
 
             if (dangerAction === 'reset') {
-                await updateDoc(doc(db, 'markets', id), {
-                    yes_votes: 0,
-                    no_votes: 0,
-                    vote_count: 0,
-                    probability: 50,
+                const isMulti = market.type === 'multi';
+                const resetFields = {
                     outcome: null,
                     updated_at: new Date().toISOString()
-                });
+                };
+                if (isMulti) {
+                    const votes = {};
+                    (market.options || []).forEach(opt => { votes[opt.id] = 0; });
+                    resetFields.votes = votes;
+                    resetFields.vote_count = 0;
+                } else {
+                    resetFields.yes_votes = 0;
+                    resetFields.no_votes = 0;
+                    resetFields.vote_count = 0;
+                    resetFields.probability = 50;
+                }
+                await updateDoc(doc(db, 'markets', id), resetFields);
             } else {
                 await deleteDoc(doc(db, 'markets', id));
             }
@@ -445,8 +583,9 @@ export default function MarketDetail() {
 
     const isClosed = new Date(market.close_time) < new Date();
     const isAdmin = auth.currentUser?.email === 'davidashishx@gmail.com';
+    const isMulti = market.type === 'multi';
 
-    // Derived Stats
+    // Derived Stats (binary)
     const yesPercent = Math.round(prob);
     const noPercent = 100 - yesPercent;
 
@@ -457,6 +596,16 @@ export default function MarketDetail() {
     const trend = prob - 50;
     const trendLabel = trend > 0 ? `+${trend.toFixed(1)}%` : `${trend.toFixed(1)}%`;
     const trendColor = trend > 0 ? '#5EEAD4' : (trend < 0 ? '#FB7185' : 'rgba(255,255,255,0.6)');
+
+    // Derived Stats (multi)
+    const optionStats = isMulti ? computeOptionStats(market) : [];
+    const leadingOption = isMulti ? getLeadingOption(market) : null;
+
+    const resolvedLabel = market.outcome === undefined || market.outcome === null
+        ? null
+        : (isMulti
+            ? (market.options?.find(o => o.id === market.outcome)?.label || market.outcome)
+            : (market.outcome ? 'YES' : 'NO'));
 
     return (
         <BackgroundLayout>
@@ -488,31 +637,54 @@ export default function MarketDetail() {
                     </Text>
 
                     <View style={styles.priceContainer}>
-                        <Text style={styles.mainPrice}>{yesPercent}%</Text>
-                        <Text style={styles.priceLabel}>chance of YES</Text>
+                        {isMulti ? (
+                            <>
+                                <Text style={styles.mainPrice}>{leadingOption?.percent ?? 0}%</Text>
+                                <Text style={styles.priceLabel}>leading: {leadingOption?.label || '—'}</Text>
+                            </>
+                        ) : (
+                            <>
+                                <Text style={styles.mainPrice}>{yesPercent}%</Text>
+                                <Text style={styles.priceLabel}>chance of YES</Text>
+                            </>
+                        )}
                     </View>
 
-                    <MarketChart marketId={id} currentProb={prob} />
+                    <MarketChart marketId={id} market={market} currentProb={prob} />
 
                     {/* Detailed Stats Row */}
-                    <View style={styles.statsGrid}>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statLabel}>YES</Text>
-                            <Text style={[styles.statValue, { color: '#5EEAD4' }]}>{yesPercent}%</Text>
+                    {isMulti ? (
+                        <View style={styles.multiStatsGrid}>
+                            {optionStats.map(opt => (
+                                <View key={opt.id} style={styles.multiStatRow}>
+                                    <Text style={styles.multiStatLabel} numberOfLines={1}>{opt.label}</Text>
+                                    <View style={styles.multiStatBarTrack}>
+                                        <View style={[styles.multiStatBarFill, { width: `${opt.percent}%`, backgroundColor: opt.id === leadingOption?.id ? Colors.dark.accent : Colors.dark.borderStrong }]} />
+                                    </View>
+                                    <Text style={styles.multiStatPercent}>{opt.percent}%</Text>
+                                </View>
+                            ))}
                         </View>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statLabel}>NO</Text>
-                            <Text style={[styles.statValue, { color: '#FB7185' }]}>{noPercent}%</Text>
+                    ) : (
+                        <View style={styles.statsGrid}>
+                            <View style={styles.statItem}>
+                                <Text style={styles.statLabel}>YES</Text>
+                                <Text style={[styles.statValue, { color: '#5EEAD4' }]}>{yesPercent}%</Text>
+                            </View>
+                            <View style={styles.statItem}>
+                                <Text style={styles.statLabel}>NO</Text>
+                                <Text style={[styles.statValue, { color: '#FB7185' }]}>{noPercent}%</Text>
+                            </View>
+                            <View style={styles.statItem}>
+                                <Text style={styles.statLabel}>CONFIDENCE</Text>
+                                <Text style={styles.statValue}>{confidence}%</Text>
+                            </View>
+                            <View style={styles.statItem}>
+                                <Text style={styles.statLabel}>TREND (24H)</Text>
+                                <Text style={[styles.statValue, { color: trendColor }]}>{trendLabel}</Text>
+                            </View>
                         </View>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statLabel}>CONFIDENCE</Text>
-                            <Text style={styles.statValue}>{confidence}%</Text>
-                        </View>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statLabel}>TREND (24H)</Text>
-                            <Text style={[styles.statValue, { color: trendColor }]}>{trendLabel}</Text>
-                        </View>
-                    </View>
+                    )}
 
                     {isAdmin && (
                         <View style={{ alignItems: 'center', marginBottom: 30, marginTop: -10 }}>
@@ -523,62 +695,102 @@ export default function MarketDetail() {
 
                     {/* Outcome Cards (Voting) */}
                     {!isClosed && !market.outcome && (
-                        <View style={styles.actionContainer}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.outcomeCard,
-                                    {
-                                        borderColor: userVote === 'YES' ? '#5EEAD4' : 'rgba(105, 240, 174, 0.5)',
-                                        borderWidth: userVote === 'YES' ? 2 : 1,
-                                        backgroundColor: userVote === 'YES' ? 'rgba(105, 240, 174, 0.1)' : 'transparent'
-                                    }
-                                ]}
-                                onPress={() => handleVote('YES')}
-                            >
-                                <Text style={[styles.outcomeTitle, { color: '#5EEAD4' }]}>{userVote === 'YES' ? 'VOTED YES' : 'Vote YES'}</Text>
-                            </TouchableOpacity>
+                        isMulti ? (
+                            <View style={styles.actionContainerWrap}>
+                                {(market.options || []).map(opt => {
+                                    const isVoted = userVote === opt.id;
+                                    return (
+                                        <TouchableOpacity
+                                            key={opt.id}
+                                            style={[
+                                                styles.outcomeCardMulti,
+                                                {
+                                                    borderColor: isVoted ? Colors.dark.accent : Colors.dark.border,
+                                                    borderWidth: isVoted ? 2 : 1,
+                                                    backgroundColor: isVoted ? 'rgba(94, 234, 212, 0.1)' : Colors.dark.surface
+                                                }
+                                            ]}
+                                            onPress={() => handleVoteMulti(opt.id)}
+                                        >
+                                            <Text style={[styles.outcomeTitle, { color: isVoted ? Colors.dark.accent : '#fff', fontSize: 15 }]} numberOfLines={2}>
+                                                {opt.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        ) : (
+                            <View style={styles.actionContainer}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.outcomeCard,
+                                        {
+                                            borderColor: userVote === 'YES' ? '#5EEAD4' : 'rgba(105, 240, 174, 0.5)',
+                                            borderWidth: userVote === 'YES' ? 2 : 1,
+                                            backgroundColor: userVote === 'YES' ? 'rgba(105, 240, 174, 0.1)' : 'transparent'
+                                        }
+                                    ]}
+                                    onPress={() => handleVote('YES')}
+                                >
+                                    <Text style={[styles.outcomeTitle, { color: '#5EEAD4' }]}>{userVote === 'YES' ? 'VOTED YES' : 'Vote YES'}</Text>
+                                </TouchableOpacity>
 
-                            <TouchableOpacity
-                                style={[
-                                    styles.outcomeCard,
-                                    {
-                                        borderColor: userVote === 'NO' ? '#FB7185' : 'rgba(255, 82, 82, 0.5)',
-                                        borderWidth: userVote === 'NO' ? 2 : 1,
-                                        backgroundColor: userVote === 'NO' ? 'rgba(255, 82, 82, 0.1)' : 'transparent'
-                                    }
-                                ]}
-                                onPress={() => handleVote('NO')}
-                            >
-                                <Text style={[styles.outcomeTitle, { color: '#FB7185' }]}>{userVote === 'NO' ? 'VOTED NO' : 'Vote NO'}</Text>
-                            </TouchableOpacity>
-                        </View>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.outcomeCard,
+                                        {
+                                            borderColor: userVote === 'NO' ? '#FB7185' : 'rgba(255, 82, 82, 0.5)',
+                                            borderWidth: userVote === 'NO' ? 2 : 1,
+                                            backgroundColor: userVote === 'NO' ? 'rgba(255, 82, 82, 0.1)' : 'transparent'
+                                        }
+                                    ]}
+                                    onPress={() => handleVote('NO')}
+                                >
+                                    <Text style={[styles.outcomeTitle, { color: '#FB7185' }]}>{userVote === 'NO' ? 'VOTED NO' : 'Vote NO'}</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )
                     )}
 
                     {/* Admin Resolution Panel */}
                     {isAdmin && !market.outcome && (
                         <View style={styles.adminPanel}>
                             <Text style={styles.adminTitle}>Admin Resolution</Text>
-                            <View style={styles.adminButtons}>
-                                <TouchableOpacity
-                                    style={[styles.adminBtn, { backgroundColor: 'rgba(105, 240, 174, 0.2)' }]}
-                                    onPress={() => initiateResolve(true)}
-                                >
-                                    <Text style={{ color: '#5EEAD4', fontFamily: 'Inter_700Bold' }}>Resolve YES</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[styles.adminBtn, { backgroundColor: 'rgba(255, 82, 82, 0.2)' }]}
-                                    onPress={() => initiateResolve(false)}
-                                >
-                                    <Text style={{ color: '#FB7185', fontFamily: 'Inter_700Bold' }}>Resolve NO</Text>
-                                </TouchableOpacity>
-                            </View>
+                            {isMulti ? (
+                                <View style={styles.actionContainerWrap}>
+                                    {(market.options || []).map(opt => (
+                                        <TouchableOpacity
+                                            key={opt.id}
+                                            style={[styles.adminBtnMulti, { backgroundColor: 'rgba(94, 234, 212, 0.15)', borderWidth: 1, borderColor: 'rgba(94, 234, 212, 0.4)' }]}
+                                            onPress={() => initiateResolve(opt.id)}
+                                        >
+                                            <Text style={{ color: Colors.dark.accent, fontFamily: 'Inter_700Bold' }} numberOfLines={1}>Resolve: {opt.label}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            ) : (
+                                <View style={styles.adminButtons}>
+                                    <TouchableOpacity
+                                        style={[styles.adminBtn, { backgroundColor: 'rgba(105, 240, 174, 0.2)' }]}
+                                        onPress={() => initiateResolve(true)}
+                                    >
+                                        <Text style={{ color: '#5EEAD4', fontFamily: 'Inter_700Bold' }}>Resolve YES</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.adminBtn, { backgroundColor: 'rgba(255, 82, 82, 0.2)' }]}
+                                        onPress={() => initiateResolve(false)}
+                                    >
+                                        <Text style={{ color: '#FB7185', fontFamily: 'Inter_700Bold' }}>Resolve NO</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
                         </View>
                     )}
 
-                    {market.outcome !== undefined && market.outcome !== null && (
+                    {resolvedLabel !== null && (
                         <View style={styles.resolutionBanner}>
                             <Text style={styles.resolutionText}>
-                                Market Resolved: {market.outcome ? 'YES' : 'NO'}
+                                Market Resolved: {resolvedLabel}
                             </Text>
                         </View>
                     )}
@@ -617,8 +829,8 @@ export default function MarketDetail() {
                             <Text style={styles.modalTitle}>Confirm Resolution</Text>
                             <Text style={styles.modalText}>
                                 Are you sure you want to resolve this market as
-                                <Text style={{ fontWeight: '700', color: targetOutcome ? '#5EEAD4' : '#FB7185' }}>
-                                    {targetOutcome ? ' YES' : ' NO'}
+                                <Text style={{ fontWeight: '700', color: Colors.dark.accent }}>
+                                    {' '}{isMulti ? (market.options?.find(o => o.id === targetOutcome)?.label || targetOutcome) : (targetOutcome ? 'YES' : 'NO')}
                                 </Text>?
                             </Text>
                             <Text style={styles.modalSubtext}>This action cannot be undone.</Text>
@@ -763,6 +975,18 @@ const styles = StyleSheet.create({
         marginVertical: 20,
         alignItems: 'center',
     },
+    chartLegend: {
+        color: Colors.dark.textSecondary,
+        fontFamily: 'Inter_600SemiBold',
+        fontSize: 12,
+        marginBottom: 8,
+    },
+    chartEmptyText: {
+        color: Colors.dark.textTertiary,
+        fontFamily: 'Inter_600SemiBold',
+        fontSize: 12,
+        marginTop: 12,
+    },
     statsGrid: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -788,10 +1012,54 @@ const styles = StyleSheet.create({
         fontFamily: 'Inter_700Bold',
         color: '#fff',
     },
+    multiStatsGrid: {
+        backgroundColor: Colors.dark.surface,
+        borderRadius: Radius.lg,
+        padding: 20,
+        marginBottom: 30,
+        borderWidth: 1,
+        borderColor: Colors.dark.border,
+        borderTopColor: Colors.dark.surfaceHighlight,
+        gap: 14,
+    },
+    multiStatRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    multiStatLabel: {
+        color: '#fff',
+        fontFamily: 'Inter_600SemiBold',
+        fontSize: 13,
+        width: 90,
+    },
+    multiStatBarTrack: {
+        flex: 1,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        overflow: 'hidden',
+    },
+    multiStatBarFill: {
+        height: '100%',
+        borderRadius: 4,
+    },
+    multiStatPercent: {
+        color: Colors.dark.textSecondary,
+        fontFamily: 'Inter_700Bold',
+        fontSize: 13,
+        width: 40,
+        textAlign: 'right',
+    },
     actionContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         gap: 16,
+    },
+    actionContainerWrap: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
     },
     outcomeCard: {
         flex: 1,
@@ -799,6 +1067,12 @@ const styles = StyleSheet.create({
         padding: 20,
         borderRadius: Radius.lg,
         borderWidth: 1,
+        alignItems: 'center',
+    },
+    outcomeCardMulti: {
+        width: '48%',
+        padding: 18,
+        borderRadius: Radius.lg,
         alignItems: 'center',
     },
     outcomeTitle: {
@@ -832,6 +1106,12 @@ const styles = StyleSheet.create({
     },
     adminBtn: {
         flex: 1,
+        padding: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    adminBtnMulti: {
+        width: '48%',
         padding: 12,
         borderRadius: 8,
         alignItems: 'center',

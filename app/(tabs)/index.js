@@ -71,10 +71,26 @@ export default function HomeScreen() {
                 const marketDoc = featSnapshot.docs[0];
                 const marketData = { id: marketDoc.id, ...marketDoc.data() };
 
-                // Use the pre-calculated probability from the market document
-                const prob = marketData.probability !== undefined ? marketData.probability : 50;
+                if (marketData.type === 'multi') {
+                    // Multi-choice markets have no single `probability` field —
+                    // derive the leading option's vote-share percent instead.
+                    const votes = marketData.votes || {};
+                    const options = marketData.options || [];
+                    const total = options.reduce((sum, o) => sum + (votes[o.id] || 0), 0);
+                    const leading = options.reduce((best, o) => {
+                        const count = votes[o.id] || 0;
+                        return !best || count > best.count ? { ...o, count } : best;
+                    }, null);
+                    const leadingPercent = leading && total > 0
+                        ? Math.round((leading.count / total) * 100)
+                        : Math.round(100 / (options.length || 2));
 
-                setFeaturedMarket({ ...marketData, avg_probability: prob });
+                    setFeaturedMarket({ ...marketData, avg_probability: leadingPercent, leadingLabel: leading?.label || null });
+                } else {
+                    // Use the pre-calculated probability from the market document
+                    const prob = marketData.probability !== undefined ? marketData.probability : 50;
+                    setFeaturedMarket({ ...marketData, avg_probability: prob });
+                }
             }
 
             if (currentUser) {
@@ -139,6 +155,10 @@ export default function HomeScreen() {
         ? displayFeatured.avg_probability > 50
         : null;
 
+    const featTrendLabel = displayFeatured.type === 'multi'
+        ? (displayFeatured.leadingLabel || 'WAITING')
+        : (isFeatUp === null ? 'WAITING' : (isFeatUp ? 'BULLISH' : 'BEARISH'));
+
     return (
         <BackgroundLayout>
             <ScrollView
@@ -170,12 +190,15 @@ export default function HomeScreen() {
                                 <Text style={styles.probValue}>{featProb}</Text>
                             </View>
                             <View style={styles.chartPlaceholder}>
-                                <Text style={{
-                                    color: isFeatUp === null ? Colors.dark.textSecondary : (isFeatUp ? Colors.dark.accent : Colors.dark.danger),
-                                    fontFamily: 'Inter_700Bold',
-                                    fontSize: 16
-                                }}>
-                                    {isFeatUp === null ? 'WAITING' : (isFeatUp ? 'BULLISH' : 'BEARISH')}
+                                <Text
+                                    style={{
+                                        color: isFeatUp === null ? Colors.dark.textSecondary : (isFeatUp ? Colors.dark.accent : Colors.dark.danger),
+                                        fontFamily: 'Inter_700Bold',
+                                        fontSize: 16
+                                    }}
+                                    numberOfLines={1}
+                                >
+                                    {featTrendLabel}
                                 </Text>
                             </View>
                         </View>

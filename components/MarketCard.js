@@ -8,18 +8,36 @@ import { Colors, Radius } from '../constants/theme';
 
 export default function MarketCard({ market, isAdmin }) {
     const { id, question, close_time } = market;
+    const isMulti = market.type === 'multi';
+
     const probability = market.avg_probability !== undefined && market.avg_probability !== null
         ? Math.round(market.avg_probability)
         : 50;
 
+    // Leading option for multi-choice markets — recomputed straight from the raw
+    // votes map, same derivation used on the detail page.
+    const leadingOption = useMemo(() => {
+        if (!isMulti || !Array.isArray(market.options) || market.options.length === 0) return null;
+        const votes = market.votes || {};
+        const total = market.options.reduce((sum, o) => sum + (votes[o.id] || 0), 0);
+        return market.options.reduce((best, o) => {
+            const count = votes[o.id] || 0;
+            const percent = total > 0 ? Math.round((count / total) * 100) : Math.round(100 / market.options.length);
+            return !best || count > best.votes ? { id: o.id, label: o.label, votes: count, percent } : best;
+        }, null);
+    }, [isMulti, market.options, market.votes]);
+
     const voteCount = market.vote_count || 0;
     const isClosed = new Date(close_time) < new Date();
     const isHigh = probability > 50;
-    const trendColor = isHigh ? Colors.dark.accent : Colors.dark.danger;
+    const trendColor = isMulti ? Colors.dark.accent : (isHigh ? Colors.dark.accent : Colors.dark.danger);
     const gradientId = `spark-${id}`;
 
-    // Generate simplified sparkline path
+    // Generate simplified sparkline path (binary only — decorative, not real
+    // history; multi-choice markets skip the sparkline in favor of the leading
+    // option's label + percent, see render below)
     const { linePath, fillPath } = useMemo(() => {
+        if (isMulti) return { linePath: '', fillPath: '' };
         // Mock data points based on current probability
         const points = [
             probability - 10 + Math.random() * 5,
@@ -43,7 +61,7 @@ export default function MarketCard({ market, isAdmin }) {
         const fill = `${line} L ${width},${height} L 0,${height} Z`;
 
         return { linePath: line, fillPath: fill };
-    }, [probability]);
+    }, [probability, isMulti]);
 
     return (
         <Link href={`/market/${id}`} asChild>
@@ -69,36 +87,47 @@ export default function MarketCard({ market, isAdmin }) {
                             Ends: {close_time ? new Date(close_time.endsWith('Z') || close_time.includes('+') ? close_time : close_time + 'Z').toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                         </Text>
                     </View>
-                    <View style={styles.chartCol}>
-                        <Svg width="80" height="40">
-                            <Defs>
-                                <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                                    <Stop offset="0" stopColor={trendColor} stopOpacity={0.35} />
-                                    <Stop offset="1" stopColor={trendColor} stopOpacity={0} />
-                                </LinearGradient>
-                            </Defs>
-                            <Path d={fillPath} fill={`url(#${gradientId})`} />
-                            <Path
-                                d={linePath}
-                                stroke={trendColor}
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                fill="none"
-                            />
-                        </Svg>
-                    </View>
-                    <View style={styles.probCol}>
-                        <Text style={[styles.probText, { color: trendColor }]}>
-                            {probability}%
-                        </Text>
-                        <Ionicons
-                            name={isHigh ? "arrow-up" : "arrow-down"}
-                            size={12}
-                            color={trendColor}
-                            style={{ marginTop: 2 }}
-                        />
-                    </View>
+                    {isMulti ? (
+                        <View style={styles.multiCol}>
+                            <Text style={styles.multiLabel} numberOfLines={1}>{leadingOption?.label || '—'}</Text>
+                            <Text style={[styles.probText, { color: trendColor }]}>
+                                {leadingOption?.percent ?? 0}%
+                            </Text>
+                        </View>
+                    ) : (
+                        <>
+                            <View style={styles.chartCol}>
+                                <Svg width="80" height="40">
+                                    <Defs>
+                                        <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                                            <Stop offset="0" stopColor={trendColor} stopOpacity={0.35} />
+                                            <Stop offset="1" stopColor={trendColor} stopOpacity={0} />
+                                        </LinearGradient>
+                                    </Defs>
+                                    <Path d={fillPath} fill={`url(#${gradientId})`} />
+                                    <Path
+                                        d={linePath}
+                                        stroke={trendColor}
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        fill="none"
+                                    />
+                                </Svg>
+                            </View>
+                            <View style={styles.probCol}>
+                                <Text style={[styles.probText, { color: trendColor }]}>
+                                    {probability}%
+                                </Text>
+                                <Ionicons
+                                    name={isHigh ? "arrow-up" : "arrow-down"}
+                                    size={12}
+                                    color={trendColor}
+                                    style={{ marginTop: 2 }}
+                                />
+                            </View>
+                        </>
+                    )}
                 </View>
             </Pressable>
         </Link>
@@ -179,6 +208,16 @@ const styles = StyleSheet.create({
     probCol: {
         alignItems: 'flex-end',
         minWidth: 50,
+    },
+    multiCol: {
+        alignItems: 'flex-end',
+        maxWidth: 110,
+    },
+    multiLabel: {
+        fontSize: 11,
+        color: Colors.dark.textSecondary,
+        fontFamily: 'Inter_600SemiBold',
+        marginBottom: 2,
     },
     probText: {
         fontSize: 18,

@@ -2,13 +2,14 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Button, Alert } from 'react-native';
 import { auth, db } from '../../lib/firebase';
-import { doc, getDoc, setDoc, collection, query, where, getDocs, deleteDoc, runTransaction, increment, writeBatch, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, orderBy, getDocs, onSnapshot, deleteDoc, runTransaction, increment, writeBatch, addDoc, serverTimestamp } from 'firebase/firestore';
 import { getRankName, RANKS } from '../../utils/reputation';
 import { useRouter } from 'expo-router';
 import { ScrollView, TouchableOpacity, Modal, FlatList, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useHeaderHeight } from '@react-navigation/elements';
 import BackgroundLayout from '../../components/BackgroundLayout';
+import { Colors, Radius } from '../../constants/theme';
 
 export default function Profile() {
     const headerHeight = useHeaderHeight();
@@ -17,9 +18,26 @@ export default function Profile() {
     const [rankModalVisible, setRankModalVisible] = useState(false);
     const router = useRouter();
 
+    // Pending Questions (automation-drafted markets awaiting admin review)
+    const [pendingModalVisible, setPendingModalVisible] = useState(false);
+    const [pendingMarkets, setPendingMarkets] = useState([]);
+    const [processingIds, setProcessingIds] = useState(new Set());
+    const [acceptingAll, setAcceptingAll] = useState(false);
+
     useEffect(() => {
         fetchProfile();
     }, []);
+
+    useEffect(() => {
+        if (!profile?.is_admin) return;
+        const q = query(collection(db, 'pending_markets'), orderBy('created_at', 'asc'));
+        const unsub = onSnapshot(q, (snap) => {
+            setPendingMarkets(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (err) => {
+            console.error('[Profile] pending_markets listener failed:', err);
+        });
+        return () => unsub();
+    }, [profile?.is_admin]);
 
     async function fetchProfile() {
         try {
@@ -178,7 +196,69 @@ export default function Profile() {
         }
     }
 
+    // Turn an accepted draft into a real, live market — same doc shape the
+    // manual "New Market" modal writes (app/(tabs)/markets.js), just sourced
+    // from the pending draft instead of the form.
+    async function acceptPending(item) {
+        setProcessingIds(prev => new Set(prev).add(item.id));
+        try {
+            const closeTime = new Date(Date.now() + (item.close_time_days || 7) * 24 * 60 * 60 * 1000).toISOString();
+            const base = {
+                question: item.question,
+                description: item.description || 'Auto-generated',
+                close_time: closeTime,
+                category: item.category || 'General',
+                outcome: null,
+                created_at: new Date().toISOString()
+            };
 
+            if (item.type === 'multi' && Array.isArray(item.options) && item.options.length >= 2) {
+                const votes = {};
+                item.options.forEach(o => { votes[o.id] = 0; });
+                await addDoc(collection(db, 'markets'), { ...base, type: 'multi', options: item.options, votes, vote_count: 0 });
+            } else {
+                await addDoc(collection(db, 'markets'), base);
+            }
+
+            await deleteDoc(doc(db, 'pending_markets', item.id));
+        } catch (e) {
+            console.error('[Profile] Accept pending failed:', e);
+            Alert.alert('Error', 'Could not accept this question.');
+        } finally {
+            setProcessingIds(prev => {
+                const next = new Set(prev);
+                next.delete(item.id);
+                return next;
+            });
+        }
+    }
+
+    async function rejectPending(item) {
+        setProcessingIds(prev => new Set(prev).add(item.id));
+        try {
+            await deleteDoc(doc(db, 'pending_markets', item.id));
+        } catch (e) {
+            console.error('[Profile] Reject pending failed:', e);
+            Alert.alert('Error', 'Could not reject this question.');
+        } finally {
+            setProcessingIds(prev => {
+                const next = new Set(prev);
+                next.delete(item.id);
+                return next;
+            });
+        }
+    }
+
+    async function acceptAllPending() {
+        setAcceptingAll(true);
+        try {
+            for (const item of pendingMarkets) {
+                await acceptPending(item);
+            }
+        } finally {
+            setAcceptingAll(false);
+        }
+    }
 
     if (loading) return <BackgroundLayout style={styles.center}><ActivityIndicator color="#5EEAD4" /></BackgroundLayout>;
     if (!profile) {
@@ -247,7 +327,13 @@ export default function Profile() {
                                 <Text style={[styles.adminBtnText, { color: '#5EEAD4' }]}>Recalculate Stats</Text>
                             </TouchableOpacity>
 
-
+                            <TouchableOpacity
+                                onPress={() => setPendingModalVisible(true)}
+                                style={[styles.adminButton, { marginTop: 10, backgroundColor: 'rgba(94, 234, 212, 0.15)', borderColor: '#5EEAD4' }]}
+                            >
+                                <Ionicons name="mail-unread-outline" size={20} color="#5EEAD4" />
+                                <Text style={[styles.adminBtnText, { color: '#5EEAD4' }]}>Review Pending Questions ({pendingMarkets.length})</Text>
+                            </TouchableOpacity>
                         </View>
                     )}
                 </View>
@@ -282,6 +368,91 @@ export default function Profile() {
                                                 <Text style={[styles.rankName, isCurrent && { color: '#fff', fontSize: 16 }]}>{item}</Text>
                                             </View>
                                             <Text style={[styles.rankPoints, isCurrent && { color: '#5EEAD4' }]}>{minScore}+ pts</Text>
+                                        </View>
+                                    );
+                                }}
+                            />
+                        </View>
+                    </View>
+                </Modal>
+
+                {/* Pending Questions Review Modal (admin only) */}
+                <Modal
+                    visible={pendingModalVisible}
+                    transparent={true}
+                    animationType="slide"
+                    onRequestClose={() => setPendingModalVisible(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContent}>
+                            <View style={styles.modalHeader}>
+                                <Text style={styles.modalTitle}>Pending Questions</Text>
+                                <TouchableOpacity onPress={() => setPendingModalVisible(false)}>
+                                    <Ionicons name="close" size={24} color="#fff" />
+                                </TouchableOpacity>
+                            </View>
+                            <Text style={styles.modalSubtext}>
+                                Drafted by the trending-question automation. Accept to publish as a live market, reject to discard.
+                            </Text>
+
+                            {pendingMarkets.length > 1 && (
+                                <TouchableOpacity
+                                    onPress={acceptAllPending}
+                                    disabled={acceptingAll}
+                                    style={[styles.pendingAcceptAllBtn, acceptingAll && { opacity: 0.6 }]}
+                                >
+                                    <Ionicons name="checkmark-done-outline" size={18} color={Colors.dark.onAccent} />
+                                    <Text style={styles.pendingAcceptAllText}>
+                                        {acceptingAll ? 'Accepting...' : `Accept All (${pendingMarkets.length})`}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+
+                            <FlatList
+                                data={pendingMarkets}
+                                keyExtractor={(item) => item.id}
+                                showsVerticalScrollIndicator={false}
+                                ListEmptyComponent={
+                                    <Text style={styles.pendingEmptyText}>No pending questions right now.</Text>
+                                }
+                                renderItem={({ item }) => {
+                                    const isProcessing = processingIds.has(item.id) || acceptingAll;
+                                    return (
+                                        <View style={styles.pendingCard}>
+                                            <View style={styles.pendingBadgeRow}>
+                                                <View style={styles.pendingBadge}>
+                                                    <Text style={styles.pendingBadgeText}>{item.category || 'General'}</Text>
+                                                </View>
+                                                <View style={[styles.pendingBadge, item.type === 'multi' && styles.pendingBadgeMulti]}>
+                                                    <Text style={styles.pendingBadgeText}>
+                                                        {item.type === 'multi' ? `${item.options?.length || 0} options` : 'Binary'}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                            <Text style={styles.pendingQuestion}>{item.question}</Text>
+                                            {item.type === 'multi' && Array.isArray(item.options) && (
+                                                <Text style={styles.pendingOptions}>
+                                                    {item.options.map(o => o.label).join(' • ')}
+                                                </Text>
+                                            )}
+                                            <View style={styles.pendingActions}>
+                                                <TouchableOpacity
+                                                    onPress={() => rejectPending(item)}
+                                                    disabled={isProcessing}
+                                                    style={[styles.pendingActionBtn, styles.pendingRejectBtn]}
+                                                >
+                                                    <Ionicons name="close" size={18} color={Colors.dark.danger} />
+                                                    <Text style={[styles.pendingActionText, { color: Colors.dark.danger }]}>Reject</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    onPress={() => acceptPending(item)}
+                                                    disabled={isProcessing}
+                                                    style={[styles.pendingActionBtn, styles.pendingAcceptBtn]}
+                                                >
+                                                    <Ionicons name="checkmark" size={18} color={Colors.dark.accent} />
+                                                    <Text style={[styles.pendingActionText, { color: Colors.dark.accent }]}>Accept</Text>
+                                                </TouchableOpacity>
+                                            </View>
                                         </View>
                                     );
                                 }}
@@ -510,5 +681,94 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontFamily: 'Inter_400Regular',
         marginBottom: 4,
+    },
+    pendingAcceptAllBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: Colors.dark.accent,
+        borderRadius: Radius.pill,
+        paddingVertical: 12,
+        marginBottom: 16,
+    },
+    pendingAcceptAllText: {
+        color: Colors.dark.onAccent,
+        fontFamily: 'Inter_700Bold',
+        fontSize: 14,
+    },
+    pendingEmptyText: {
+        color: Colors.dark.textTertiary,
+        fontFamily: 'Inter_400Regular',
+        fontSize: 14,
+        textAlign: 'center',
+        marginTop: 40,
+    },
+    pendingCard: {
+        backgroundColor: Colors.dark.surface,
+        borderRadius: Radius.md,
+        borderWidth: 1,
+        borderColor: Colors.dark.border,
+        padding: 14,
+        marginBottom: 12,
+    },
+    pendingBadgeRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 8,
+    },
+    pendingBadge: {
+        backgroundColor: Colors.dark.surfaceElevated,
+        borderRadius: Radius.pill,
+        paddingHorizontal: 10,
+        paddingVertical: 3,
+    },
+    pendingBadgeMulti: {
+        backgroundColor: 'rgba(94, 234, 212, 0.15)',
+    },
+    pendingBadgeText: {
+        color: Colors.dark.textSecondary,
+        fontSize: 11,
+        fontFamily: 'Inter_600SemiBold',
+    },
+    pendingQuestion: {
+        color: '#fff',
+        fontSize: 15,
+        fontFamily: 'Inter_600SemiBold',
+        lineHeight: 20,
+        marginBottom: 4,
+    },
+    pendingOptions: {
+        color: Colors.dark.textSecondary,
+        fontSize: 12,
+        fontFamily: 'Inter_400Regular',
+        marginBottom: 10,
+    },
+    pendingActions: {
+        flexDirection: 'row',
+        gap: 10,
+        marginTop: 10,
+    },
+    pendingActionBtn: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        paddingVertical: 10,
+        borderRadius: Radius.sm,
+        borderWidth: 1,
+    },
+    pendingRejectBtn: {
+        backgroundColor: 'rgba(251, 113, 133, 0.1)',
+        borderColor: 'rgba(251, 113, 133, 0.4)',
+    },
+    pendingAcceptBtn: {
+        backgroundColor: 'rgba(94, 234, 212, 0.1)',
+        borderColor: 'rgba(94, 234, 212, 0.4)',
+    },
+    pendingActionText: {
+        fontFamily: 'Inter_600SemiBold',
+        fontSize: 13,
     }
 });

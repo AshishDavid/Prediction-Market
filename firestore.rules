@@ -36,10 +36,22 @@ service cloud.firestore {
       // 1. Admins can update anything (e.g. resolving, fixing typos)
       // 2. Authenticated Users can update voting stats ONLY (during a transaction)
       allow update: if isAdmin() || (
-        isAuthenticated() && 
+        isAuthenticated() &&
         // Ensure they are NOT changing critical configuration fields
         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['question', 'description', 'category', 'outcome', 'close_time', 'created_at']))
       );
+
+      // Real vote-history snapshots (one per vote, written inside the vote transaction)
+      match /history/{historyId} {
+        allow read: if true;
+        allow create: if isAuthenticated();
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // 1b. PENDING_MARKETS collection (automation drafts awaiting admin review)
+    match /pending_markets/{pendingId} {
+      allow read, create, update, delete: if isAdmin();
     }
 
     // 2. PREDICTIONS collection

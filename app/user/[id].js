@@ -120,9 +120,11 @@ export default function PublicProfile() {
                                     <Text style={styles.predDate}>
                                         {new Date(item.updated_at).toLocaleDateString()}
                                     </Text>
-                                    <Text style={styles.predProb}>
-                                        {Math.round(item.probability)}% prob
-                                    </Text>
+                                    {item.probability !== undefined && (
+                                        <Text style={styles.predProb}>
+                                            {Math.round(item.probability)}% prob
+                                        </Text>
+                                    )}
                                 </View>
                             </TouchableOpacity>
                         ))

@@ -72,6 +72,8 @@ export default function MarketList() {
     const [newQuestion, setNewQuestion] = useState('');
     const [newSource, setNewSource] = useState('');
     const [newCategory, setNewCategory] = useState('General');
+    const [newType, setNewType] = useState('binary'); // 'binary' | 'multi'
+    const [newOptions, setNewOptions] = useState(['', '']); // 2-4 option labels, only used when newType === 'multi'
 
     const [closeDate, setCloseDate] = useState(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -149,9 +151,26 @@ export default function MarketList() {
         return categoryMatch && tabMatch;
     });
 
+    function updateOption(index, text) {
+        setNewOptions(prev => prev.map((o, i) => (i === index ? text : o)));
+    }
+
+    function addOption() {
+        setNewOptions(prev => (prev.length >= 4 ? prev : [...prev, '']));
+    }
+
+    function removeOption(index) {
+        setNewOptions(prev => (prev.length <= 2 ? prev : prev.filter((_, i) => i !== index)));
+    }
+
     async function handleCreateMarket() {
         if (!newQuestion.trim()) {
             Alert.alert('Required', 'Please enter a question');
+            return;
+        }
+        const trimmedOptions = newOptions.map(o => o.trim()).filter(Boolean);
+        if (newType === 'multi' && trimmedOptions.length < 2) {
+            Alert.alert('Required', 'Please enter at least 2 options');
             return;
         }
         setCreating(true);
@@ -165,19 +184,30 @@ export default function MarketList() {
             }
 
             const closeTimeISO = closeDate.toISOString();
-            await addDoc(collection(db, 'markets'), {
+            const base = {
                 question: newQuestion.trim(),
                 description: newSource || 'User Created',
                 close_time: closeTimeISO,
                 category: newCategory,
                 outcome: null,
                 created_at: new Date().toISOString()
-            });
+            };
+
+            if (newType === 'multi') {
+                const options = trimmedOptions.map((label, i) => ({ id: String.fromCharCode(97 + i), label }));
+                const votes = {};
+                options.forEach(o => { votes[o.id] = 0; });
+                await addDoc(collection(db, 'markets'), { ...base, type: 'multi', options, votes, vote_count: 0 });
+            } else {
+                await addDoc(collection(db, 'markets'), base);
+            }
 
             Alert.alert('Success', 'Market created!');
             setModalVisible(false);
             setNewQuestion('');
             setNewSource('');
+            setNewType('binary');
+            setNewOptions(['', '']);
             // Listener updates automatically
         } catch (error) {
             console.error('[MarketCreate] Failed:', error);
@@ -280,6 +310,40 @@ export default function MarketList() {
                                 value={newSource}
                                 onChangeText={setNewSource}
                             />
+
+                            <Text style={styles.label}>Type</Text>
+                            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+                                <Chip label="Binary (Yes/No)" active={newType === 'binary'} onPress={() => setNewType('binary')} />
+                                <Chip label="Multi Choice" active={newType === 'multi'} onPress={() => setNewType('multi')} />
+                            </View>
+
+                            {newType === 'multi' && (
+                                <>
+                                    <Text style={styles.label}>Options (2-4)</Text>
+                                    {newOptions.map((opt, i) => (
+                                        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                                            <TextInput
+                                                style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                                                placeholder={`Option ${i + 1}`}
+                                                placeholderTextColor="rgba(255,255,255,0.4)"
+                                                value={opt}
+                                                onChangeText={(text) => updateOption(i, text)}
+                                            />
+                                            {newOptions.length > 2 && (
+                                                <TouchableOpacity onPress={() => removeOption(i)} style={{ padding: 6 }}>
+                                                    <Ionicons name="close-circle" size={22} color="rgba(255,255,255,0.4)" />
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+                                    ))}
+                                    {newOptions.length < 4 && (
+                                        <TouchableOpacity onPress={addOption} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 20 }}>
+                                            <Ionicons name="add-circle-outline" size={18} color={Colors.dark.accent} />
+                                            <Text style={{ color: Colors.dark.accent, fontFamily: 'Inter_600SemiBold', fontSize: 14 }}>Add Option</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </>
+                            )}
 
                             <Text style={styles.label}>Category</Text>
                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
